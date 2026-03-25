@@ -1,0 +1,214 @@
+{% extends "core/base.html" %}
+{% block title %}Forge — Dashboard{% endblock %}
+
+{% block extra_css %}
+.status-bar {
+  display: flex; gap: 16px; align-items: center;
+  padding: 12px 16px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 20px;
+}
+.status-bar .stat { text-align: center; }
+.status-bar .stat-value { font-size: 20px; font-weight: 700; }
+.status-bar .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.status-bar .active-indicator {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: 6px; background: var(--surface-2);
+}
+.status-bar .active-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-btn {
+  padding: 4px 12px; border-radius: 4px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-muted); cursor: pointer;
+  font-family: inherit; font-size: 12px; transition: all 0.15s;
+}
+.filter-btn:hover { border-color: var(--accent); color: var(--text); }
+.filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.task-list { display: flex; flex-direction: column; gap: 8px; }
+.task-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 16px; cursor: pointer; transition: all 0.15s;
+}
+.task-card:hover { border-color: var(--accent); }
+.task-card.expanded { border-color: var(--accent); }
+.task-header { display: flex; align-items: center; gap: 10px; }
+.task-id { color: var(--text-muted); font-size: 12px; min-width: 40px; }
+.task-title { flex: 1; font-weight: 500; }
+.task-meta { display: flex; gap: 6px; align-items: center; }
+.task-time { color: var(--text-muted); font-size: 11px; }
+.task-detail {
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+}
+.task-detail-section { margin-bottom: 8px; }
+.task-detail-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+.task-detail-content {
+  font-size: 13px; white-space: pre-wrap; line-height: 1.5;
+  background: var(--surface-2); padding: 8px 12px; border-radius: 4px;
+}
+.task-chain { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.task-chain-item { font-size: 11px; color: var(--text-muted); }
+.task-chain-arrow { color: var(--border); font-size: 10px; }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+{% endblock %}
+
+{% block content %}
+<div x-data="dashboard()" x-init="init()">
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="stat">
+      <div class="stat-value" x-text="counts.pending || 0"></div>
+      <div class="stat-label">Pending</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" style="color: var(--blue)" x-text="counts.active || 0"></div>
+      <div class="stat-label">Active</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" style="color: var(--green)" x-text="counts.done || 0"></div>
+      <div class="stat-label">Done</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" style="color: var(--red)" x-text="counts.failed || 0"></div>
+      <div class="stat-label">Failed</div>
+    </div>
+    <div style="flex:1"></div>
+    <template x-if="status.active_task">
+      <div class="active-indicator">
+        <div class="active-dot"></div>
+        <span class="badge" :class="'badge-' + status.active_task.type" x-text="status.active_task.type"></span>
+        <span style="font-size: 13px" x-text="status.active_task.title.substring(0, 40)"></span>
+      </div>
+    </template>
+    <template x-if="!status.active_task">
+      <div class="active-indicator" style="color: var(--text-muted)">
+        <span style="font-size: 13px">Idle</span>
+      </div>
+    </template>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <button class="filter-btn" :class="{ active: !filterType && !filterStatus }" @click="filterType=''; filterStatus=''">All</button>
+    <span style="color: var(--border)">|</span>
+    <template x-for="t in ['pm','dev','review','qc']">
+      <button class="filter-btn" :class="{ active: filterType === t }" @click="filterType = filterType === t ? '' : t" x-text="t"></button>
+    </template>
+    <span style="color: var(--border)">|</span>
+    <template x-for="s in ['pending','active','done','failed']">
+      <button class="filter-btn" :class="{ active: filterStatus === s }" @click="filterStatus = filterStatus === s ? '' : s" x-text="s"></button>
+    </template>
+  </div>
+
+  <!-- Task List -->
+  <div class="task-list">
+    <template x-if="filteredTasks.length === 0">
+      <div class="empty-state">No tasks yet. Start a conversation in PM Chat.</div>
+    </template>
+    <template x-for="task in filteredTasks" :key="task.id">
+      <div class="task-card" :class="{ expanded: expandedId === task.id }" @click="expandedId = expandedId === task.id ? null : task.id">
+        <div class="task-header">
+          <span class="task-id">#<span x-text="task.id"></span></span>
+          <span class="badge" :class="'badge-' + task.type" x-text="task.type"></span>
+          <span class="task-title" x-text="task.title"></span>
+          <div class="task-meta">
+            <span class="badge" :class="'badge-' + task.status" x-text="task.status"></span>
+            <span class="task-time" x-text="timeAgo(task.created_at)"></span>
+          </div>
+        </div>
+
+        <template x-if="expandedId === task.id">
+          <div class="task-detail">
+            <template x-if="task.description">
+              <div class="task-detail-section">
+                <div class="task-detail-label">Description</div>
+                <div class="task-detail-content" x-text="task.description"></div>
+              </div>
+            </template>
+            <template x-if="task.note">
+              <div class="task-detail-section">
+                <div class="task-detail-label">Agent Response</div>
+                <div class="task-detail-content" x-html="renderMd(task.note)"></div>
+              </div>
+            </template>
+            <div style="display: flex; gap: 16px; font-size: 12px; color: var(--text-muted);">
+              <span>Created by: <strong x-text="task.created_by || 'user'"></strong></span>
+              <span>Priority: <strong x-text="task.priority"></strong></span>
+              <template x-if="task.parent_id">
+                <span>Parent: <strong>#<span x-text="task.parent_id"></span></strong></span>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function dashboard() {
+  return {
+    tasks: [],
+    status: {},
+    counts: {},
+    filterType: '',
+    filterStatus: '',
+    expandedId: null,
+
+    get filteredTasks() {
+      return this.tasks.filter(t => {
+        if (this.filterType && t.type !== this.filterType) return false;
+        if (this.filterStatus && t.status !== this.filterStatus) return false;
+        return true;
+      });
+    },
+
+    async init() {
+      await this.refresh();
+      setInterval(() => this.refresh(), 5000);
+    },
+
+    async refresh() {
+      try {
+        const [tasks, status] = await Promise.all([
+          fetch('/api/tasks/').then(r => r.json()),
+          fetch('/api/status/').then(r => r.json()),
+        ]);
+        // Sort: active first, then pending, then by created_at desc
+        tasks.sort((a, b) => {
+          const order = { active: 0, pending: 1, done: 2, failed: 3 };
+          const oa = order[a.status] ?? 9, ob = order[b.status] ?? 9;
+          if (oa !== ob) return oa - ob;
+          return new Date(b.created_at) - new Date(a.created_at);
+        });
+        this.tasks = tasks;
+        this.status = status;
+        this.counts = status.task_counts || {};
+      } catch (e) {
+        console.error('refresh error:', e);
+      }
+    },
+
+    timeAgo(iso) {
+      const s = Math.floor((Date.now() - new Date(iso)) / 1000);
+      if (s < 60) return s + 's ago';
+      if (s < 3600) return Math.floor(s / 60) + 'm ago';
+      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+      return Math.floor(s / 86400) + 'd ago';
+    },
+
+    renderMd(text) {
+      if (!text) return '';
+      try { return marked.parse(text); } catch { return text; }
+    },
+  };
+}
+</script>
+{% endblock %}

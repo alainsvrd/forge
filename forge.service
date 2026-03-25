@@ -1,0 +1,12 @@
+[Unit]
+Description=Forge Autonomous Development Platform
+After=postgresql.service network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/forge/start-all.sh
+ExecStop=/opt/forge/stop-all.sh
+
+[Install]
+WantedBy=multi-user.target

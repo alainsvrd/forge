@@ -1,0 +1,235 @@
+{% extends "core/base.html" %}
+{% block title %}Forge — PM Chat{% endblock %}
+
+{% block extra_css %}
+.chat-container {
+  display: flex; flex-direction: column;
+  height: calc(100vh - 100px);
+}
+.chat-messages {
+  flex: 1; overflow-y: auto; padding: 16px 0;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.msg {
+  max-width: 80%; padding: 10px 14px; border-radius: 12px;
+  font-size: 14px; line-height: 1.6;
+}
+.msg-user {
+  align-self: flex-end;
+  background: var(--accent); color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.msg-pm {
+  align-self: flex-start;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+.msg-pm :is(p, ul, ol, h1, h2, h3, h4, pre, blockquote) { margin: 8px 0; }
+.msg-pm p:first-child { margin-top: 0; }
+.msg-pm p:last-child { margin-bottom: 0; }
+.msg-pm code {
+  background: var(--bg); padding: 2px 6px; border-radius: 3px;
+  font-size: 13px;
+}
+.msg-pm pre {
+  background: var(--bg); padding: 12px; border-radius: 6px;
+  overflow-x: auto;
+}
+.msg-pm pre code { background: none; padding: 0; }
+.msg-system {
+  align-self: center;
+  color: var(--text-muted); font-size: 12px;
+  font-style: italic;
+}
+.msg-meta {
+  font-size: 11px; color: var(--text-muted); margin-top: 4px;
+}
+.msg-user .msg-meta { color: rgba(255,255,255,0.6); text-align: right; }
+
+.chat-input-area {
+  padding: 16px 0; border-top: 1px solid var(--border);
+  display: flex; gap: 8px;
+}
+.chat-input-area textarea {
+  flex: 1; resize: none; min-height: 44px; max-height: 150px;
+  padding: 10px 14px; font-size: 14px;
+}
+.chat-input-area button { min-width: 80px; }
+
+.thinking-indicator {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; color: var(--text-muted); font-size: 13px;
+}
+.thinking-dots span {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-muted); animation: bounce 1.4s infinite ease-in-out;
+}
+.thinking-dots span:nth-child(1) { animation-delay: 0s; }
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-8px); }
+}
+.empty-chat {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  color: var(--text-muted); gap: 12px;
+}
+.empty-chat h2 { color: var(--text); font-size: 18px; }
+.empty-chat p { max-width: 400px; text-align: center; line-height: 1.6; }
+{% endblock %}
+
+{% block content %}
+<div x-data="pmChat()" x-init="init()" class="chat-container">
+
+  <!-- Messages -->
+  <div class="chat-messages" x-ref="messages">
+    <template x-if="messages.length === 0 && !thinking">
+      <div class="empty-chat">
+        <h2>Talk to your PM</h2>
+        <p>Describe what you want to build. The PM will ask questions,
+           propose a plan, and kick off the development pipeline.</p>
+      </div>
+    </template>
+
+    <template x-for="msg in messages" :key="msg.id">
+      <div class="msg" :class="'msg-' + msg.role">
+        <template x-if="msg.role === 'pm'">
+          <div x-html="renderMd(msg.content)"></div>
+        </template>
+        <template x-if="msg.role !== 'pm'">
+          <div x-text="msg.content"></div>
+        </template>
+        <div class="msg-meta" x-text="formatTime(msg.created_at)"></div>
+      </div>
+    </template>
+
+    <template x-if="thinking">
+      <div class="thinking-indicator">
+        <div class="thinking-dots"><span></span><span></span><span></span></div>
+        PM is thinking...
+      </div>
+    </template>
+  </div>
+
+  <!-- Input -->
+  <div class="chat-input-area">
+    <textarea
+      x-model="input"
+      @keydown.enter.prevent="if (!$event.shiftKey) send()"
+      placeholder="Describe what you want to build..."
+      rows="1"
+      @input="autoResize($event.target)"
+    ></textarea>
+    <button class="btn btn-primary" @click="send()" :disabled="!input.trim() || sending">
+      <span x-show="!sending">Send</span>
+      <span x-show="sending">...</span>
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function pmChat() {
+  return {
+    messages: [],
+    input: '',
+    sending: false,
+    thinking: false,
+    lastId: 0,
+    eventSource: null,
+
+    async init() {
+      // Load history
+      try {
+        const msgs = await fetch('/api/chat/?project_id=1&after=0').then(r => r.json());
+        this.messages = msgs;
+        if (msgs.length > 0) this.lastId = msgs[msgs.length - 1].id;
+      } catch {}
+
+      // Start SSE stream
+      this.startStream();
+      this.scrollBottom();
+
+      // Check if we're waiting for PM response
+      const lastMsg = this.messages[this.messages.length - 1];
+      if (lastMsg && lastMsg.role === 'user') this.thinking = true;
+    },
+
+    startStream() {
+      const url = `/api/chat/stream/?project_id=1&after=${this.lastId}`;
+      this.eventSource = new EventSource(url);
+      this.eventSource.addEventListener('message', (e) => {
+        const msg = JSON.parse(e.data);
+        // Avoid duplicates
+        if (!this.messages.find(m => m.id === msg.id)) {
+          this.messages.push(msg);
+          this.lastId = msg.id;
+          // Stop thinking if PM replied
+          if (msg.role === 'pm') this.thinking = false;
+          this.$nextTick(() => this.scrollBottom());
+        }
+      });
+      this.eventSource.onerror = () => {
+        this.eventSource.close();
+        // Reconnect after 5s
+        setTimeout(() => this.startStream(), 5000);
+      };
+    },
+
+    async send() {
+      const content = this.input.trim();
+      if (!content) return;
+      this.sending = true;
+      this.input = '';
+
+      try {
+        const res = await fetch('/api/chat/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.getCSRF() },
+          body: JSON.stringify({ project_id: 1, content, role: 'user' }),
+        });
+        const msg = await res.json();
+        // Add locally if SSE hasn't delivered it yet
+        if (!this.messages.find(m => m.id === msg.id)) {
+          this.messages.push(msg);
+          this.lastId = msg.id;
+        }
+        this.thinking = true;
+        this.$nextTick(() => this.scrollBottom());
+      } catch (e) {
+        console.error('send error:', e);
+      }
+      this.sending = false;
+    },
+
+    scrollBottom() {
+      const el = this.$refs.messages;
+      if (el) el.scrollTop = el.scrollHeight;
+    },
+
+    autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+    },
+
+    formatTime(iso) {
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    },
+
+    renderMd(text) {
+      if (!text) return '';
+      try { return marked.parse(text); } catch { return text; }
+    },
+
+    getCSRF() {
+      const c = document.cookie.match(/csrftoken=([^;]+)/);
+      return c ? c[1] : '';
+    },
+  };
+}
+</script>
+{% endblock %}

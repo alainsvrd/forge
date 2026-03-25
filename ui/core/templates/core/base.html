@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Forge{% endblock %}</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface-2: #242836;
+      --border: #2e3347;
+      --text: #e1e4ed;
+      --text-muted: #8b90a5;
+      --accent: #6c8cff;
+      --green: #4ade80;
+      --red: #f87171;
+      --orange: #fb923c;
+      --purple: #a78bfa;
+      --blue: #60a5fa;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Nav */
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      padding: 12px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-brand {
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--accent);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .nav-links { display: flex; gap: 16px; }
+    .nav-links a {
+      color: var(--text-muted);
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    .nav-links a:hover, .nav-links a.active {
+      color: var(--text);
+      background: var(--surface-2);
+      text-decoration: none;
+    }
+    .nav-spacer { flex: 1; }
+    .nav-user { color: var(--text-muted); font-size: 12px; }
+
+    /* Main */
+    .main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    /* Status badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-pending { background: #374151; color: #9ca3af; }
+    .badge-active { background: #1e3a5f; color: var(--blue); }
+    .badge-done { background: #14532d; color: var(--green); }
+    .badge-failed { background: #7f1d1d; color: var(--red); }
+    .badge-pm { background: #2e1065; color: var(--purple); }
+    .badge-dev { background: #1e3a5f; color: var(--blue); }
+    .badge-review { background: #431407; color: var(--orange); }
+    .badge-qc { background: #14532d; color: var(--green); }
+
+    /* Buttons */
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn:hover { background: var(--border); }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+
+    /* Inputs */
+    input, textarea {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 14px;
+      width: 100%;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    {% block extra_css %}{% endblock %}
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <span class="nav-brand">Forge</span>
+    <div class="nav-links">
+      <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">Dashboard</a>
+      <a href="{% url 'pm_chat' %}" class="{% if request.resolver_match.url_name == 'pm_chat' %}active{% endif %}">PM Chat</a>
+    </div>
+    <div class="nav-spacer"></div>
+    {% if user.is_authenticated %}
+      <span class="nav-user">{{ user.username }}</span>
+      <a href="{% url 'logout' %}" style="font-size: 12px; color: var(--text-muted);">logout</a>
+    {% endif %}
+  </nav>
+  <div class="main">
+    {% block content %}{% endblock %}
+  </div>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
