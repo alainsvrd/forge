@@ -107,7 +107,7 @@ cd "$FORGE_DIR"
 su - "$FORGE_USER" -c "cd ${FORGE_DIR} && /home/${FORGE_USER}/.bun/bin/bun install" >/dev/null 2>&1
 
 # ── Workspace init ──
-echo "[8/8] Initializing workspace..."
+echo "[8/9] Initializing workspace..."
 cd "${FORGE_DIR}/workspace"
 if [ ! -d ".git" ]; then
   su - "$FORGE_USER" -c "cd ${FORGE_DIR}/workspace && git init && git add -A && git commit -m 'Initial workspace'" >/dev/null 2>&1
@@ -137,21 +137,22 @@ cat > "/home/${FORGE_USER}/.claude/settings.json" <<'EOF'
 EOF
 chown -R "${FORGE_USER}:${FORGE_USER}" "/home/${FORGE_USER}/.claude"
 
+# ── Install forge CLI ──
+echo "[9/9] Installing forge CLI..."
+cp "${FORGE_DIR}/forge-cli.sh" /usr/local/bin/forge
+chmod +x /usr/local/bin/forge
+
 # ── Permissions ──
 chown -R "${FORGE_USER}:${FORGE_USER}" "${FORGE_DIR}"
 
-# ── Systemd ──
+# ── Systemd (registered but NOT started — user must auth first) ──
 cp "${FORGE_DIR}/forge.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable forge
 
 echo ""
 echo "=== Forge setup complete ==="
-echo "  UI:       http://localhost:8100"
-echo "  Login:    admin / admin"
-echo "  Start:    systemctl start forge"
-echo "  Manual:   ${FORGE_DIR}/start-all.sh"
 echo ""
-echo "IMPORTANT: Set up Claude Code authentication for the forge user:"
-echo "  su - forge -c 'claude login'"
-echo "  # Or inject .credentials.json for Max subscription"
+echo "  Run: forge login   → authenticate Claude Code"
+echo "  Run: forge start   → launch all services"
+echo "  Run: forge help    → see all commands"

@@ -5,6 +5,15 @@ set -euo pipefail
 FORGE_DIR="/opt/forge"
 USER="forge"
 
+# ── Auth check ──
+if [ ! -f "/home/${USER}/.claude/.credentials.json" ] && \
+   [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "Error: Claude Code is not authenticated."
+  echo ""
+  echo "Run 'forge login' first, then try 'forge start' again."
+  exit 1
+fi
+
 echo "=== Starting Forge ==="
 
 # 1. Start Xvfb (virtual display for QC Chrome)
