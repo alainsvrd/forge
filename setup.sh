@@ -54,6 +54,9 @@ if [ ! -f "/home/${FORGE_USER}/.bun/bin/bun" ]; then
   su - "$FORGE_USER" -c "curl -fsSL https://bun.sh/install | bash" >/dev/null 2>&1
 fi
 
+# Set ownership early — git clone runs as root, but forge user needs to write
+chown -R "${FORGE_USER}:${FORGE_USER}" "${FORGE_DIR}"
+
 # ── PostgreSQL ──
 echo "[5/8] Setting up PostgreSQL..."
 # Ensure running
