@@ -36,8 +36,15 @@ su - "$USER" -c "screen -dmS $SESSION bash -c '\
     --dangerously-load-development-channels server:forge-${TYPE}-channel \
     -n forge-${TYPE}'"
 
-# Auto-accept the development channels warning
-sleep 8
+# Auto-accept prompts:
+# 1. Bypass permissions prompt — select option 2 ("Yes, I accept") then Enter
+#    (skipped if skipDangerousModePermissionPrompt=true in settings.json)
+# 2. Development channels warning — press Enter to confirm
+sleep 5
+# Navigate to option 2 (down arrow) and confirm
+su - "$USER" -c "screen -S $SESSION -p 0 -X stuff $'\033[B\r'" 2>/dev/null || true
+sleep 5
+# Accept dev channels warning (Enter)
 su - "$USER" -c "screen -S $SESSION -p 0 -X stuff \"\r\""
 
 # Send initial prompt to trigger MCP server lazy init
