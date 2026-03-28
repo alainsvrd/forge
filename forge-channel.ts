@@ -95,7 +95,7 @@ const COMMON_TOOLS = [
   {
     name: "task_create",
     description:
-      "Create a task for another agent. Use type to target: pm, dev, review, or qc.",
+      "Create a task for another agent. Use type to target: pm, dev, review, or qc. ALWAYS include a clear title AND a detailed description — the receiving agent has no other context.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -104,10 +104,10 @@ const COMMON_TOOLS = [
           enum: ["pm", "dev", "review", "qc"],
           description: "Which agent should handle this task",
         },
-        title: { type: "string", description: "Task title" },
+        title: { type: "string", description: "Clear, descriptive task title (required)" },
         description: {
           type: "string",
-          description: "Detailed description of what needs to be done",
+          description: "Detailed description: what to do, acceptance criteria, relevant context. This is the ONLY info the receiving agent gets.",
         },
         priority: {
           type: "string",
@@ -119,7 +119,7 @@ const COMMON_TOOLS = [
           description: "ID of the parent task (for traceability)",
         },
       },
-      required: ["type", "title"],
+      required: ["type", "title", "description"],
     },
   },
 ];
@@ -190,17 +190,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { type, title, description, priority, parent_id } = args as {
       type: string;
       title: string;
-      description?: string;
+      description: string;
       priority?: string;
       parent_id?: number;
     };
+    if (!title || title.trim().length < 5) {
+      return {
+        content: [{ type: "text", text: "Error: title is required and must be at least 5 characters." }],
+        isError: true,
+      };
+    }
+    if (!description || description.trim().length < 10) {
+      return {
+        content: [{ type: "text", text: "Error: description is required and must be at least 10 characters. The receiving agent needs detailed context." }],
+        isError: true,
+      };
+    }
     try {
       const result = await api("/api/tasks/", {
         method: "POST",
         body: JSON.stringify({
           type,
-          title,
-          description: description || "",
+          title: title.trim(),
+          description: description.trim(),
           priority: priority || "normal",
           created_by: AGENT_TYPE,
           parent_id: parent_id || null,

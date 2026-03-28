@@ -13,6 +13,16 @@ by creating tasks.
 - `task_create(type, title, description, priority, parent_id)` — create work for other agents
 - `task_update(task_id, status, note)` — update task status
 
+## CRITICAL: Task Quality
+
+When you create a task with `task_create`, the **title and description are the ONLY
+context the receiving agent gets**. If you create a task with an empty or vague
+description, the agent works blind and will produce wrong results.
+
+Every task MUST have:
+- **title**: Clear, specific summary of what to do (e.g. "Build Django poll app with UUID links and HTMX real-time updates")
+- **description**: Full context — what to build, how it should work, acceptance criteria, any decisions made with the user. Include everything the dev/reviewer/QC needs to know without asking.
+
 ## How the Pipeline Works
 
 Only ONE task flows through the pipeline at a time (strict sequential):

@@ -88,9 +88,12 @@ def api_tasks(request):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'invalid json'}, status=400)
 
+    title = (data.get('title') or '').strip()
+    if not title:
+        return JsonResponse({'error': 'title is required'}, status=400)
+
     project_id = data.get('project_id')
     if not project_id:
-        # Default to first project
         project = Project.objects.first()
         if not project:
             return JsonResponse({'error': 'no project exists'}, status=400)
@@ -99,8 +102,8 @@ def api_tasks(request):
     task = Task.objects.create(
         project_id=project_id,
         type=data.get('type', 'dev'),
-        title=data.get('title', ''),
-        description=data.get('description', ''),
+        title=title,
+        description=(data.get('description') or '').strip(),
         priority=data.get('priority', 'normal'),
         created_by=data.get('created_by', ''),
         parent_id=data.get('parent_id'),
