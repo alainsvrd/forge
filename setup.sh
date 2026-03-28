@@ -112,14 +112,42 @@ su - "$FORGE_USER" -c "cd ${FORGE_DIR} && /home/${FORGE_USER}/.bun/bin/bun insta
 
 # ── Workspace init ──
 echo "[8/9] Initializing workspace..."
-cd "${FORGE_DIR}/workspace"
-if [ ! -d ".git" ]; then
-  su - "$FORGE_USER" -c "cd ${FORGE_DIR}/workspace && git init && git add -A && git commit -m 'Initial workspace'" >/dev/null 2>&1
+mkdir -p "${FORGE_DIR}/workspace/.forge/screenshots"
+
+# Ensure .mcp.json exists (may be missing if workspace was a git submodule)
+if [ ! -f "${FORGE_DIR}/workspace/.mcp.json" ]; then
+  cat > "${FORGE_DIR}/workspace/.mcp.json" <<'MCPEOF'
+{
+  "mcpServers": {
+    "forge-pm-channel": { "command": "/home/forge/.bun/bin/bun", "args": ["/opt/forge/forge-channel.ts", "--type", "pm"] },
+    "forge-dev-channel": { "command": "/home/forge/.bun/bin/bun", "args": ["/opt/forge/forge-channel.ts", "--type", "dev"] },
+    "forge-review-channel": { "command": "/home/forge/.bun/bin/bun", "args": ["/opt/forge/forge-channel.ts", "--type", "review"] },
+    "forge-qc-channel": { "command": "/home/forge/.bun/bin/bun", "args": ["/opt/forge/forge-channel.ts", "--type", "qc"] }
+  }
+}
+MCPEOF
 fi
 
-# Create .forge directory for screenshots etc.
-mkdir -p "${FORGE_DIR}/workspace/.forge/screenshots"
+# Ensure CLAUDE.md exists
+if [ ! -f "${FORGE_DIR}/workspace/CLAUDE.md" ]; then
+  cat > "${FORGE_DIR}/workspace/CLAUDE.md" <<'CLEOF'
+# Project
+
+## Forge Infrastructure — DO NOT MODIFY
+- Forge UI: port 8100, database "forge", code in /opt/forge/
+- Forge screens: forge-pm, forge-dev, forge-review, forge-qc
+- Never bind to port 8100 or alter /opt/forge/.
+CLEOF
+fi
+
 chown -R "${FORGE_USER}:${FORGE_USER}" "${FORGE_DIR}/workspace"
+
+# Init git repo for workspace (separate from forge repo)
+cd "${FORGE_DIR}/workspace"
+if [ ! -d ".git" ] || [ -f ".git" ]; then
+  rm -rf .git  # remove submodule pointer if present
+  su - "$FORGE_USER" -c "cd ${FORGE_DIR}/workspace && git init && git add -A && git commit -m 'Initial workspace'" >/dev/null 2>&1
+fi
 
 # ── Generate secrets + config ──
 FORGE_SECRET=$(openssl rand -hex 32)
