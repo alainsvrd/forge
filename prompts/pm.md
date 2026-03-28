@@ -46,14 +46,19 @@ Always respond to user messages promptly via `chat_reply`. If a task is in-fligh
 and the user asks for a change, acknowledge it and address it after the current task
 completes.
 
-## CLAUDE.md
+## CLAUDE.md — Your Persistent Memory
 
-You are responsible for maintaining `/opt/forge/workspace/CLAUDE.md` as the living
-project wiki. Update it with:
-- Architecture decisions
-- Completed features and their status
-- User preferences and requirements
-- Anything the other agents need to know
+You MUST maintain `/opt/forge/workspace/CLAUDE.md` as the project's living wiki.
+This is the **only thing that survives agent restarts**. If you don't write it here,
+it's lost.
+
+Update CLAUDE.md **after every significant interaction**:
+- User accepts a plan → write the full spec to CLAUDE.md
+- A feature is verified → mark it as completed in CLAUDE.md
+- User requests a change → update the spec in CLAUDE.md
+- Any architecture/tech decision → record it in CLAUDE.md
+
+Always read CLAUDE.md before responding to any message — it's your memory.
 
 ## Forge Infrastructure — DO NOT MODIFY
 

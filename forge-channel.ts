@@ -336,16 +336,38 @@ async function pollLoop() {
           await api(`/api/chat/${pendingMsg.id}/delivered/`, {
             method: "POST",
           });
-          // Push to PM's Claude session via MCP notification
+
+          // Fetch context: chat history + task summary
+          const ctx = await api("/api/context/?type=pm");
+
+          // Build rich notification with full context
+          const chatHistory = (ctx.chat_history || [])
+            .map((m: any) => `[${m.role}] ${m.content}`)
+            .join("\n");
+          const taskSummary = (ctx.task_summary || [])
+            .map((t: any) => `#${t.id} [${t.type}/${t.status}] ${t.title}${t.note ? " — " + t.note : ""}`)
+            .join("\n");
+
+          const content = [
+            "=== CONVERSATION HISTORY ===",
+            chatHistory || "(no previous messages)",
+            "",
+            "=== TASK STATUS ===",
+            taskSummary || "(no tasks yet)",
+            "",
+            "=== NEW USER MESSAGE ===",
+            pendingMsg.content,
+          ].join("\n");
+
           await server.notification({
             method: "notifications/claude/channel",
             params: {
-              content: `User message:\n${pendingMsg.content}`,
+              content,
               meta: { source: "user_chat", message_id: String(pendingMsg.id) },
             },
           });
           console.error(
-            `forge-pm: delivered user message #${pendingMsg.id}`
+            `forge-pm: delivered user message #${pendingMsg.id} with context`
           );
         }
       } catch (e: any) {
@@ -420,10 +442,30 @@ async function pollLoop() {
         body: JSON.stringify({ status: "active" }),
       });
 
+      // Fetch context: task detail + parent chain
+      let contextBlock = "";
+      try {
+        const ctx = await api(
+          `/api/context/?type=${AGENT_TYPE}&task_id=${task.id}`
+        );
+        if (ctx.parent_chain && ctx.parent_chain.length > 0) {
+          const chain = ctx.parent_chain
+            .map(
+              (t: any) =>
+                `#${t.id} [${t.type}/${t.status}] ${t.title}${t.note ? " — " + t.note : ""}`
+            )
+            .join("\n");
+          contextBlock = `\n\n=== PARENT TASK CHAIN ===\n${chain}`;
+        }
+      } catch {
+        // Non-fatal — deliver task without parent context
+      }
+
       // Push to agent via MCP channel
       const content = [
         `Task #${task.id}: ${task.title}`,
         task.description ? `\n${task.description}` : "",
+        contextBlock,
       ]
         .filter(Boolean)
         .join("");

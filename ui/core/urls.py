@@ -21,4 +21,7 @@ urlpatterns = [
 
     # Status API
     path('api/status/', views.api_status, name='api_status'),
+
+    # Context API (MCP channels fetch this before delivering notifications)
+    path('api/context/', views.api_context, name='api_context'),
 ]

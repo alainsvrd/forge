@@ -340,3 +340,93 @@ def api_status(request):
             'title': active_task.title,
         } if active_task else None,
     })
+
+
+# ---------------------------------------------------------------------------
+# Context API (MCP channels call this before delivering notifications)
+# ---------------------------------------------------------------------------
+
+def _build_task_parent_chain(task_id, max_depth=5):
+    """Walk up the parent chain for a task, return list of summaries."""
+    chain = []
+    seen = set()
+    current_id = task_id
+    while current_id and len(chain) < max_depth:
+        if current_id in seen:
+            break
+        seen.add(current_id)
+        try:
+            t = Task.objects.get(id=current_id)
+            chain.append({
+                'id': t.id, 'type': t.type, 'status': t.status,
+                'title': t.title, 'note': t.note[:300] if t.note else '',
+            })
+            current_id = t.parent_id
+        except Task.DoesNotExist:
+            break
+    chain.reverse()
+    return chain
+
+
+@csrf_exempt
+@_api_auth
+@require_GET
+def api_context(request):
+    """Build a context bundle for an agent before delivering a notification.
+
+    GET /api/context/?type=pm
+      → chat history + task summary (for PM chat delivery)
+
+    GET /api/context/?type=dev&task_id=5
+      → task detail + parent chain (for task delivery)
+    """
+    agent_type = request.GET.get('type', 'pm')
+    task_id = request.GET.get('task_id')
+
+    if agent_type == 'pm':
+        # PM context: chat history + task summary
+        chat_msgs = list(
+            ChatMessage.objects.order_by('-id')[:15].values(
+                'id', 'role', 'content', 'created_at'
+            )
+        )
+        chat_msgs.reverse()
+        for m in chat_msgs:
+            m['created_at'] = m['created_at'].isoformat()
+            m['content'] = m['content'][:500]  # Truncate for context window
+
+        tasks = list(
+            Task.objects.exclude(status='failed').order_by('-id')[:10].values(
+                'id', 'type', 'status', 'title', 'note', 'created_by'
+            )
+        )
+        tasks.reverse()
+        for t in tasks:
+            t['note'] = (t['note'] or '')[:200]
+
+        return JsonResponse({
+            'chat_history': chat_msgs,
+            'task_summary': tasks,
+        })
+
+    else:
+        # Dev/Review/QC context: task + parent chain
+        if not task_id:
+            return JsonResponse({'error': 'task_id required'}, status=400)
+
+        try:
+            task = Task.objects.get(id=task_id)
+        except Task.DoesNotExist:
+            return JsonResponse({'error': 'task not found'}, status=404)
+
+        chain = _build_task_parent_chain(task.parent_id) if task.parent_id else []
+
+        return JsonResponse({
+            'task': {
+                'id': task.id, 'type': task.type, 'status': task.status,
+                'title': task.title, 'description': task.description,
+                'priority': task.priority, 'created_by': task.created_by,
+                'note': task.note, 'parent_id': task.parent_id,
+            },
+            'parent_chain': chain,
+        })
