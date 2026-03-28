@@ -336,7 +336,7 @@ async function pollLoop() {
           await api(`/api/chat/${pendingMsg.id}/delivered/`, {
             method: "POST",
           });
-          // Push to PM's Claude session
+          // Push to PM's Claude session via MCP notification
           await server.notification({
             method: "notifications/claude/channel",
             params: {

@@ -15,8 +15,9 @@ case "$TYPE" in
   *) echo "Invalid type: $TYPE (must be pm|dev|review|qc)"; exit 1 ;;
 esac
 
-# Kill existing session if any
+# Kill existing session and orphan MCP channel processes
 su - "$USER" -c "screen -S $SESSION -X quit" 2>/dev/null || true
+pkill -f "forge-channel.ts --type $TYPE" 2>/dev/null || true
 sleep 1
 
 # Build environment
