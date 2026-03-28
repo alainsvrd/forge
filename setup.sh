@@ -7,6 +7,7 @@ FORGE_DIR="/opt/forge"
 FORGE_USER="forge"
 FORGE_DB="forge"
 FORGE_DB_PASS="forge"
+FORGE_DOMAIN="${FORGE_DOMAIN:-}"  # Set by installer or pass as env var
 
 echo "=== Forge Setup ==="
 
@@ -120,11 +121,23 @@ fi
 mkdir -p "${FORGE_DIR}/workspace/.forge/screenshots"
 chown -R "${FORGE_USER}:${FORGE_USER}" "${FORGE_DIR}/workspace"
 
-# ── Generate secrets ──
+# ── Generate secrets + config ──
 FORGE_SECRET=$(openssl rand -hex 32)
+
+# Auto-detect domain if not provided
+if [ -z "$FORGE_DOMAIN" ]; then
+  # Try to read from existing .env
+  FORGE_DOMAIN=$(grep -oP 'FORGE_DOMAIN=\K.*' "${FORGE_DIR}/ui/.env" 2>/dev/null || true)
+fi
+if [ -z "$FORGE_DOMAIN" ]; then
+  # Try hostname-based guess
+  FORGE_DOMAIN=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "localhost")
+fi
+
 cat > "${FORGE_DIR}/ui/.env" <<EOF
 FORGE_SECRET=${FORGE_SECRET}
 FORGE_DB_PASSWORD=${FORGE_DB_PASS}
+FORGE_DOMAIN=${FORGE_DOMAIN}
 EOF
 chmod 600 "${FORGE_DIR}/ui/.env"
 

@@ -28,7 +28,7 @@ echo "Starting Django on :8100..."
 su - "$USER" -c "screen -dmS forge-django bash -c '\
   cd ${FORGE_DIR}/ui && \
   source ${FORGE_DIR}/venv/bin/activate && \
-  export FORGE_DB_PASSWORD=forge && \
+  set -a && source ${FORGE_DIR}/ui/.env && set +a && \
   exec gunicorn forge_ui.asgi:application \
     -k uvicorn.workers.UvicornWorker \
     -b 0.0.0.0:8100 \

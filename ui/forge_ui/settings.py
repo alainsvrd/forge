@@ -11,12 +11,19 @@ SECRET_KEY = os.environ.get(
 DEBUG = os.environ.get('FORGE_DEBUG', '1') == '1'
 
 ALLOWED_HOSTS = ['*']
-CSRF_TRUSTED_ORIGINS = [
-    'https://*.borealhost.ai',
-    'http://*.borealhost.ai',
-    'http://localhost:8100',
-    'https://localhost:8100',
-]
+
+# CSRF trusted origins — set FORGE_DOMAIN in .env at deploy time
+# e.g. FORGE_DOMAIN=myproject.borealhost.ai
+_forge_domain = os.environ.get('FORGE_DOMAIN', '')
+CSRF_TRUSTED_ORIGINS = ['http://localhost:8100', 'https://localhost:8100']
+if _forge_domain:
+    # Trust the domain and any subdomain (e.g. forge.myproject.borealhost.ai)
+    CSRF_TRUSTED_ORIGINS += [
+        f'https://{_forge_domain}',
+        f'http://{_forge_domain}',
+        f'https://*.{_forge_domain}',
+        f'http://*.{_forge_domain}',
+    ]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
