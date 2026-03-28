@@ -11,6 +11,12 @@ SECRET_KEY = os.environ.get(
 DEBUG = os.environ.get('FORGE_DEBUG', '1') == '1'
 
 ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.borealhost.ai',
+    'http://*.borealhost.ai',
+    'http://localhost:8100',
+    'https://localhost:8100',
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
