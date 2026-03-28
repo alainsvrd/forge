@@ -17,13 +17,20 @@ ALLOWED_HOSTS = ['*']
 _forge_domain = os.environ.get('FORGE_DOMAIN', '')
 CSRF_TRUSTED_ORIGINS = ['http://localhost:8100', 'https://localhost:8100']
 if _forge_domain:
-    # Trust the domain and any subdomain (e.g. forge.myproject.borealhost.ai)
     CSRF_TRUSTED_ORIGINS += [
         f'https://{_forge_domain}',
         f'http://{_forge_domain}',
-        f'https://*.{_forge_domain}',
-        f'http://*.{_forge_domain}',
+        f'https://forge.{_forge_domain}',
+        f'http://forge.{_forge_domain}',
     ]
+    # Also trust the parent domain if it's a subdomain (e.g. borealhost.ai)
+    parts = _forge_domain.split('.')
+    if len(parts) > 2:
+        parent = '.'.join(parts[-2:])
+        CSRF_TRUSTED_ORIGINS += [
+            f'https://*.{parent}',
+            f'http://*.{parent}',
+        ]
 
 INSTALLED_APPS = [
     'django.contrib.admin',

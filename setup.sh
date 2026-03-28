@@ -14,21 +14,19 @@ echo "=== Forge Setup ==="
 # ── System dependencies ──
 echo "[1/8] Installing system packages..."
 apt update -qq
-apt install -y -qq \
+DEBIAN_FRONTEND=noninteractive apt install -y -qq \
   postgresql postgresql-client \
-  python3 python3-venv python3-pip \
+  python3 python3-venv python3-pip python3-dev \
+  libpq-dev build-essential \
   screen xvfb git curl unzip sudo \
   nginx \
   >/dev/null 2>&1
 
-# ── Node.js + Bun + Claude Code ──
-echo "[2/8] Installing Node.js, Bun, Claude Code..."
+# ── Node.js + Claude Code ──
+echo "[2/8] Installing Node.js, Claude Code..."
 if ! command -v node &>/dev/null; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null 2>&1
-  apt install -y -qq nodejs >/dev/null 2>&1
-fi
-if ! command -v bun &>/dev/null; then
-  curl -fsSL https://bun.sh/install | bash >/dev/null 2>&1
+  DEBIAN_FRONTEND=noninteractive apt install -y -qq nodejs >/dev/null 2>&1
 fi
 if ! command -v claude &>/dev/null; then
   npm install -g @anthropic-ai/claude-code >/dev/null 2>&1
@@ -50,13 +48,13 @@ if ! id "$FORGE_USER" &>/dev/null; then
   echo "${FORGE_USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/forge
 fi
 
-# Install Bun for forge user
+# Set ownership early — git clone runs as root, but forge user needs to write
+chown -R "${FORGE_USER}:${FORGE_USER}" "${FORGE_DIR}"
+
+# Install Bun for forge user (NOT root — .mcp.json references /home/forge/.bun/bin/bun)
 if [ ! -f "/home/${FORGE_USER}/.bun/bin/bun" ]; then
   su - "$FORGE_USER" -c "curl -fsSL https://bun.sh/install | bash" >/dev/null 2>&1
 fi
-
-# Set ownership early — git clone runs as root, but forge user needs to write
-chown -R "${FORGE_USER}:${FORGE_USER}" "${FORGE_DIR}"
 
 # ── PostgreSQL ──
 echo "[5/8] Setting up PostgreSQL..."
