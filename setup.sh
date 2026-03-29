@@ -144,7 +144,7 @@ chown -R "${FORGE_USER}:${FORGE_USER}" "${FORGE_DIR}/workspace"
 cd "${FORGE_DIR}/workspace"
 if [ ! -d ".git" ] || [ -f ".git" ]; then
   rm -rf .git  # remove submodule pointer if present
-  su - "$FORGE_USER" -c "cd ${FORGE_DIR}/workspace && git init && git add -A && git commit -m 'Initial workspace'" >/dev/null 2>&1
+  su - "$FORGE_USER" -c "cd ${FORGE_DIR}/workspace && git init && git add -A && git commit -m 'Initial workspace'" >/dev/null 2>&1 || true
 fi
 
 # ── Generate secrets + config ──
