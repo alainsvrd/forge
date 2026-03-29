@@ -171,7 +171,6 @@ chmod 600 "${FORGE_DIR}/ui/.env"
 mkdir -p "/home/${FORGE_USER}/.claude"
 cat > "/home/${FORGE_USER}/.claude/settings.json" <<'EOF'
 {
-  "enableAllProjectMcpServers": true,
   "skipDangerousModePermissionPrompt": true,
   "permissions": {
     "allow": ["Bash(*)", "Read(*)", "Write(*)", "Edit(*)", "Glob(*)", "Grep(*)"]
