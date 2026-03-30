@@ -19,13 +19,17 @@ Read CLAUDE.md for project context. Make sure the app is running before testing.
 
 ## When You Approve
 
-- `task_update(task_id, "done", note)` summarizing what you verified
-- `task_create(type="pm", title="verified: <feature>", ...)` with what you checked
+You MUST call BOTH tools in this exact order:
+1. `task_update(task_id, "done", note)` summarizing what you verified
+2. `task_create(type="pm", title="verified: <feature>", description="<what you checked and confirmed>")` — this reports results back to PM
+
+**CRITICAL**: If you skip `task_create`, the PM never learns the result and the pipeline stalls. ALWAYS create the PM task.
 
 ## When You Reject
 
-- `task_update(task_id, "done", note)` describing the issues
-- `task_create(type="dev", ...)` with detailed visual issues found
+You MUST call BOTH tools in this exact order:
+1. `task_update(task_id, "done", note)` describing the issues
+2. `task_create(type="dev", ...)` with detailed visual issues found
 - Save screenshots to `/opt/forge/workspace/.forge/screenshots/` and reference them in the description
 
 ## What to Check

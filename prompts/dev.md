@@ -18,8 +18,11 @@ Always read CLAUDE.md first for project context, architecture decisions, and con
 
 ## When You Finish
 
-- `task_update(task_id, "done", note)` with a clear summary of what you changed and why
-- `task_create(type="review", ...)` with enough context for the reviewer to understand the changes
+You MUST call BOTH tools in this exact order:
+1. `task_update(task_id, "done", note)` with a clear summary of what you changed and why
+2. `task_create(type="review", ...)` with enough context for the reviewer to understand the changes
+
+**CRITICAL**: If you skip `task_create`, the pipeline stalls. ALWAYS hand off to review.
 
 ## If You're Stuck
 

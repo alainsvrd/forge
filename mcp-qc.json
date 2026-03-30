@@ -1,0 +1,1 @@
+{"mcpServers":{"forge-qc-channel":{"command":"/home/forge/.bun/bin/bun","args":["/opt/forge/forge-channel.ts","--type","qc"]}}}

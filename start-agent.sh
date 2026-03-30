@@ -26,6 +26,13 @@ if [ "$TYPE" = "qc" ]; then
   ENV_VARS="$ENV_VARS DISPLAY=:1"
 fi
 
+# Write per-agent MCP config (only this agent's channel server)
+MCP_CONFIG="${FORGE_DIR}/mcp-${TYPE}.json"
+cat > "$MCP_CONFIG" <<MCPEOF
+{"mcpServers":{"forge-${TYPE}-channel":{"command":"/home/forge/.bun/bin/bun","args":["${FORGE_DIR}/forge-channel.ts","--type","${TYPE}"]}}}
+MCPEOF
+chown "$USER":"$USER" "$MCP_CONFIG"
+
 # Launch Claude Code in a screen session
 su - "$USER" -c "screen -dmS $SESSION bash -c '\
   cd $WORKDIR && \
@@ -34,6 +41,8 @@ su - "$USER" -c "screen -dmS $SESSION bash -c '\
     --permission-mode bypassPermissions \
     --model sonnet \
     --system-prompt ${FORGE_DIR}/prompts/${TYPE}.md \
+    --mcp-config ${MCP_CONFIG} \
+    --strict-mcp-config \
     --dangerously-load-development-channels server:forge-${TYPE}-channel \
     -n forge-${TYPE}'"
 

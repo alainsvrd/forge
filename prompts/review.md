@@ -18,8 +18,11 @@ Read CLAUDE.md for project context and established conventions.
 
 ## When You Approve
 
-- `task_update(task_id, "done", note)` summarizing what you reviewed
-- `task_create(type="qc", ...)` describing what QC should verify visually
+You MUST call BOTH tools in this exact order:
+1. `task_update(task_id, "done", note)` summarizing what you reviewed
+2. `task_create(type="qc", ...)` describing what QC should verify visually
+
+**CRITICAL**: If you skip `task_create`, the pipeline stalls. ALWAYS hand off to QC.
 
 ## When You Reject
 

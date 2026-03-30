@@ -1,0 +1,1 @@
+{"mcpServers":{"forge-pm-channel":{"command":"/home/forge/.bun/bin/bun","args":["/opt/forge/forge-channel.ts","--type","pm"]}}}

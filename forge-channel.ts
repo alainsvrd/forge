@@ -158,14 +158,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         body: JSON.stringify({ status, note }),
       });
 
-      // Log the event
-      await api("/api/tasks/", {
-        method: "POST",
-        body: JSON.stringify({
-          // We log via the agent_log — but for now just track via task status
-        }),
-      }).catch(() => {});
-
       if (inflightTaskId === task_id) {
         inflightTaskId = null;
         inflightTaskTitle = "";
@@ -173,9 +165,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         nudgeSent = false;
       }
 
+      // Determine expected next agent in pipeline
+      const NEXT_AGENT: Record<string, string> = {
+        dev: "review",
+        review: "qc",
+        qc: "pm",
+      };
+      const nextAgent = NEXT_AGENT[AGENT_TYPE];
+      const handoffReminder = nextAgent
+        ? `\n\nIMPORTANT: Now call task_create(type="${nextAgent}", ...) to hand off to the ${nextAgent} agent. The pipeline stalls if you skip this.`
+        : "";
+
       return {
         content: [
-          { type: "text", text: `Task #${task_id} marked as ${status}.` },
+          { type: "text", text: `Task #${task_id} marked as ${status}.${handoffReminder}` },
         ],
       };
     } catch (e: any) {

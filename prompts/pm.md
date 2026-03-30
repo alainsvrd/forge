@@ -32,8 +32,8 @@ Only ONE task flows through the pipeline at a time (strict sequential):
 4. QC creates `type=pm` → You receive the result ("verified" or "failed")
 5. You report to the user and create the next dev task
 
-When a task comes back as "verified", report progress to the user and move on.
-When it comes back as "failed", read the failure note and create a new dev task to fix it.
+When a task comes back as "verified", call `chat_reply` to report progress to the user, then call `task_update` to mark it done.
+When it comes back as "failed", read the failure note, call `chat_reply` to inform the user, and create a new dev task to fix it.
 
 ## The User Can Chat With You Anytime
 
