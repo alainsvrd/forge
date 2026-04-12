@@ -6,15 +6,15 @@ USER="forge"
 
 echo "=== Stopping Forge ==="
 
-# Stop agents
-for agent in pm dev review qc; do
-  su - "$USER" -c "screen -S forge-${agent} -X quit" 2>/dev/null || true
-  echo "Stopped forge-${agent}"
-done
+# Stop claude -p agent subprocesses
+pkill -f "claude.*stream-json" 2>/dev/null || true
+echo "Stopped agents"
 
-# Stop Django
+# Stop Django/gunicorn
+pkill -f "gunicorn.*forge_ui" 2>/dev/null || true
 su - "$USER" -c "screen -S forge-django -X quit" 2>/dev/null || true
-echo "Stopped forge-django"
+su - "$USER" -c "screen -S forge-agents -X quit" 2>/dev/null || true
+echo "Stopped Django"
 
 # Stop Xvfb
 pkill -f "Xvfb :1" 2>/dev/null || true

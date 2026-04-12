@@ -77,7 +77,8 @@ systemctl reload postgresql || pg_ctlcluster 17 main reload || true
 
 # Create user and database
 sudo -u postgres psql -c "CREATE USER ${FORGE_USER} WITH PASSWORD '${FORGE_DB_PASS}';" 2>/dev/null || true
-sudo -u postgres psql -c "CREATE DATABASE ${FORGE_DB} OWNER ${FORGE_USER};" 2>/dev/null || true
+sudo -u postgres psql -c "CREATE DATABASE ${FORGE_DB} OWNER ${FORGE_USER} ENCODING 'UTF8' LC_COLLATE='C.utf8' LC_CTYPE='C.utf8' TEMPLATE=template0;" 2>/dev/null || \
+  sudo -u postgres psql -c "CREATE DATABASE ${FORGE_DB} OWNER ${FORGE_USER};" 2>/dev/null || true
 
 # ── Python venv + Django ──
 echo "[6/8] Setting up Django..."
@@ -121,20 +122,6 @@ su - "$FORGE_USER" -c "cd ${FORGE_DIR} && /home/${FORGE_USER}/.bun/bin/bun insta
 echo "[8/9] Initializing workspace..."
 mkdir -p "${FORGE_DIR}/workspace/.forge/screenshots"
 
-# Ensure .mcp.json exists (may be missing if workspace was a git submodule)
-if [ ! -f "${FORGE_DIR}/workspace/.mcp.json" ]; then
-  cat > "${FORGE_DIR}/workspace/.mcp.json" <<'MCPEOF'
-{
-  "mcpServers": {
-    "forge-pm-channel": { "command": "/home/forge/.bun/bin/bun", "args": ["/opt/forge/forge-channel.ts", "--type", "pm"] },
-    "forge-dev-channel": { "command": "/home/forge/.bun/bin/bun", "args": ["/opt/forge/forge-channel.ts", "--type", "dev"] },
-    "forge-review-channel": { "command": "/home/forge/.bun/bin/bun", "args": ["/opt/forge/forge-channel.ts", "--type", "review"] },
-    "forge-qc-channel": { "command": "/home/forge/.bun/bin/bun", "args": ["/opt/forge/forge-channel.ts", "--type", "qc"] }
-  }
-}
-MCPEOF
-fi
-
 # Ensure CLAUDE.md exists
 if [ ! -f "${FORGE_DIR}/workspace/CLAUDE.md" ]; then
   cat > "${FORGE_DIR}/workspace/CLAUDE.md" <<'CLEOF'
@@ -142,7 +129,7 @@ if [ ! -f "${FORGE_DIR}/workspace/CLAUDE.md" ]; then
 
 ## Forge Infrastructure — DO NOT MODIFY
 - Forge UI: port 8100, database "forge", code in /opt/forge/
-- Forge screens: forge-pm, forge-dev, forge-review, forge-qc
+- Agents managed by ClaudeCodeManager (not screen sessions)
 - Never bind to port 8100 or alter /opt/forge/.
 CLEOF
 fi
