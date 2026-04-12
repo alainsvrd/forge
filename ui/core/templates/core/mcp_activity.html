@@ -1,0 +1,186 @@
+{% extends "core/base.html" %}
+{% block title %}Forge — MCP Activity{% endblock %}
+
+{% block extra_css %}
+.activity-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.activity-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.activity-filters {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.filter-btn {
+  padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-muted); cursor: pointer;
+  font-family: inherit; font-size: 11px; transition: all 0.15s;
+}
+.filter-btn:hover { border-color: var(--accent); color: var(--text); }
+.filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.activity-entry {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.activity-entry:hover { border-color: var(--accent); }
+.activity-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+}
+.act-time { color: var(--text-muted); min-width: 65px; font-size: 11px; }
+.act-agent { font-weight: 600; min-width: 50px; }
+.act-tool { color: var(--accent); font-weight: 600; min-width: 100px; }
+.act-summary { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-detail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.act-detail-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.act-detail-content {
+  font-size: 11px;
+  background: var(--surface-2);
+  padding: 6px 8px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 6px;
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+  animation: pulse 1.5s ease-in-out infinite;
+  display: inline-block;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+{% endblock %}
+
+{% block content %}
+<div x-data="mcpActivityPage()" x-init="init()">
+  <div class="activity-header">
+    <h2>MCP Activity</h2>
+    <span class="live-dot"></span>
+    <span style="font-size:11px; color:var(--text-muted)">Live</span>
+    <span style="font-size:11px; color:var(--text-muted)" x-text="activity.length + ' tool calls'"></span>
+    <div class="activity-filters">
+      <button class="filter-btn" :class="{ active: !filterAgent }" @click="filterAgent=''">All</button>
+      <template x-for="t in ['pm','dev','review','qc']">
+        <button class="filter-btn" :class="{ active: filterAgent === t }" @click="filterAgent = filterAgent === t ? '' : t" x-text="t"></button>
+      </template>
+    </div>
+  </div>
+
+  <div class="activity-list">
+    <template x-if="filteredActivity.length === 0">
+      <div style="text-align:center; padding:40px; color:var(--text-muted);">No tool calls recorded yet.</div>
+    </template>
+    <template x-for="(entry, idx) in filteredActivity" :key="entry.ts + idx">
+      <div class="activity-entry" @click="expandedIdx = expandedIdx === idx ? null : idx">
+        <div class="activity-row">
+          <span class="act-time" x-text="formatTime(entry.ts)"></span>
+          <span class="act-agent badge" :class="'badge-' + entry.agent" x-text="entry.agent"></span>
+          <span class="act-tool" x-text="entry.tool"></span>
+          <span class="act-summary" x-text="toolSummary(entry)"></span>
+        </div>
+        <template x-if="expandedIdx === idx">
+          <div class="act-detail">
+            <div class="act-detail-label">Input</div>
+            <div class="act-detail-content" x-text="JSON.stringify(entry.input, null, 2)"></div>
+          </div>
+        </template>
+      </div>
+    </template>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function mcpActivityPage() {
+  return {
+    activity: [],
+    filterAgent: '',
+    expandedIdx: null,
+    _lastTs: '',
+
+    get filteredActivity() {
+      const filtered = this.filterAgent
+        ? this.activity.filter(e => e.agent === this.filterAgent)
+        : this.activity;
+      return filtered.slice().reverse();  // newest first
+    },
+
+    async init() {
+      await this.poll();
+      setInterval(() => this.poll(), 1000);
+    },
+
+    async poll() {
+      try {
+        const data = await fetch('/api/mcp-activity/?since=' + encodeURIComponent(this._lastTs) + '&limit=100').then(r => r.json());
+        if (data.activity && data.activity.length) {
+          const existing = new Set(this.activity.map(e => e.ts));
+          for (const entry of data.activity) {
+            if (!existing.has(entry.ts)) {
+              this.activity.push(entry);
+            }
+          }
+          this.activity = this.activity.slice(-200);
+          this._lastTs = this.activity[this.activity.length - 1]?.ts || '';
+        }
+      } catch (e) {
+        console.error('MCP poll error:', e);
+      }
+    },
+
+    toolSummary(tc) {
+      if (!tc.input) return '';
+      const inp = tc.input;
+      if (tc.tool === 'task_create') return `type=${inp.type} "${(inp.title||'').substring(0,60)}"`;
+      if (tc.tool === 'task_update') return `#${inp.task_id} ${inp.status}`;
+      if (tc.tool === 'chat_reply') return `"${(inp.content||'').substring(0,80)}"`;
+      if (tc.tool === 'Edit') return inp.file_path || '';
+      if (tc.tool === 'Bash') return (inp.command||'').substring(0,80);
+      if (tc.tool === 'Read') return inp.file_path || '';
+      if (tc.tool === 'Write') return inp.file_path || '';
+      const vals = Object.values(inp);
+      const first = vals.find(v => typeof v === 'string');
+      return first ? first.substring(0, 80) : JSON.stringify(inp).substring(0, 80);
+    },
+
+    formatTime(iso) {
+      if (!iso) return '';
+      try {
+        return new Date(iso).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      } catch { return ''; }
+    },
+  };
+}
+</script>
+{% endblock %}

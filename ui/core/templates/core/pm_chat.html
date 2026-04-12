@@ -78,10 +78,50 @@
 }
 .empty-chat h2 { color: var(--text); font-size: 18px; }
 .empty-chat p { max-width: 400px; text-align: center; line-height: 1.6; }
+
+/* PM Agent Status */
+.pm-status {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; font-size: 11px; color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.pm-status-dot {
+  width: 6px; height: 6px; border-radius: 50%; display: inline-block;
+}
+.pm-status-dot.ready { background: var(--green); }
+.pm-status-dot.processing { background: var(--blue); animation: pulse 1s ease-in-out infinite; }
+.pm-status-dot.stopped { background: #6b7280; }
+.pm-status-dot.error { background: var(--red); }
+.pm-status-dot.starting { background: var(--orange); animation: pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.pm-typing-preview {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 14px 8px;
+  max-height: 60px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
 {% endblock %}
 
 {% block content %}
 <div x-data="pmChat()" x-init="init()" class="chat-container">
+
+  <!-- PM Agent Status Bar -->
+  <div class="pm-status">
+    <span class="pm-status-dot" :class="pmStatus"></span>
+    <span>PM Agent: <strong x-text="pmStatus"></strong></span>
+    <span x-show="pmCost" x-text="'$' + pmCost.toFixed(4)" style="margin-left:auto;"></span>
+  </div>
+
+  <!-- PM Typing Preview -->
+  <template x-if="pmActivity && thinking">
+    <div class="pm-typing-preview" x-text="pmActivity.substring(pmActivity.length - 200)"></div>
+  </template>
 
   <!-- Messages -->
   <div class="chat-messages" x-ref="messages">
@@ -140,6 +180,9 @@ function pmChat() {
     thinking: false,
     lastId: 0,
     eventSource: null,
+    pmStatus: 'stopped',
+    pmActivity: '',
+    pmCost: 0,
 
     async init() {
       // Load history
@@ -156,6 +199,24 @@ function pmChat() {
       // Check if we're waiting for PM response
       const lastMsg = this.messages[this.messages.length - 1];
       if (lastMsg && lastMsg.role === 'user') this.thinking = true;
+
+      // Poll PM agent status for typing indicator
+      this.pollPmStatus();
+      setInterval(() => this.pollPmStatus(), 800);
+    },
+
+    async pollPmStatus() {
+      try {
+        const data = await fetch('/api/agents/status/').then(r => r.json());
+        const pm = data.agents?.pm;
+        if (pm) {
+          this.pmStatus = pm.status;
+          this.pmActivity = pm.current_activity || '';
+          this.pmCost = pm.total_cost_usd || 0;
+          // Auto-detect thinking based on PM processing state
+          if (pm.status === 'processing') this.thinking = true;
+        }
+      } catch {}
     },
 
     startStream() {

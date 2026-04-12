@@ -23,7 +23,7 @@ sleep 1
 # Build environment
 ENV_VARS="FORGE_SECRET=$(grep -oP 'FORGE_SECRET=\K.*' ${FORGE_DIR}/ui/.env 2>/dev/null || echo forge-dev-secret)"
 if [ "$TYPE" = "qc" ]; then
-  ENV_VARS="$ENV_VARS DISPLAY=:1"
+  ENV_VARS="$ENV_VARS DISPLAY=:1 PATH=${FORGE_DIR}/browser-use-venv/bin:\$PATH"
 fi
 
 # Write per-agent MCP config (only this agent's channel server)

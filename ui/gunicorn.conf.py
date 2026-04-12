@@ -11,6 +11,6 @@ if os.path.exists(env_file):
                 os.environ[key] = value
 
 bind = '0.0.0.0:8100'
-workers = 2
+workers = 1  # Must be 1 — ClaudeCodeManager singleton must live in a single process
 timeout = 120
 worker_class = 'uvicorn.workers.UvicornWorker'

@@ -19,6 +19,7 @@ DEBIAN_FRONTEND=noninteractive apt install -y -qq \
   python3 python3-venv python3-pip python3-dev \
   libpq-dev build-essential \
   screen xvfb git curl unzip sudo \
+  dbus-x11 \
   nginx \
   >/dev/null 2>&1
 
@@ -40,6 +41,14 @@ if ! command -v google-chrome-stable &>/dev/null; then
   rm -f /tmp/chrome.deb
 fi
 npx playwright install chromium >/dev/null 2>&1 || true
+
+# ── browser-use CLI (for QC agent) ──
+echo "[3b/8] Installing browser-use CLI..."
+if [ ! -d "${FORGE_DIR}/browser-use-venv" ]; then
+  python3 -m venv "${FORGE_DIR}/browser-use-venv"
+fi
+"${FORGE_DIR}/browser-use-venv/bin/pip" install -q browser-use==0.12.2
+chown -R "${FORGE_USER}:${FORGE_USER}" "${FORGE_DIR}/browser-use-venv"
 
 # ── Create forge user ──
 echo "[4/8] Creating forge user..."

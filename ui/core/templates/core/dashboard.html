@@ -1,214 +1,692 @@
 {% extends "core/base.html" %}
-{% block title %}Forge — Dashboard{% endblock %}
+{% block title %}Forge{% endblock %}
 
 {% block extra_css %}
+/* Layout: sidebar chat + main content */
+.forge-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 12px;
+  height: calc(100vh - 70px);
+  overflow: hidden;
+}
+@media (max-width: 1000px) {
+  .forge-layout { grid-template-columns: 1fr; grid-template-rows: 50vh 1fr; }
+}
+
+/* Chat Panel (left) */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.chat-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.msg {
+  max-width: 90%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.msg-user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.msg-pm {
+  align-self: flex-start;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+.msg-pm :is(p,ul,ol,h1,h2,h3,pre,blockquote) { margin: 6px 0; }
+.msg-pm p:first-child { margin-top: 0; }
+.msg-pm p:last-child { margin-bottom: 0; }
+.msg-pm code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+.msg-pm pre { background: var(--bg); padding: 8px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+.msg-pm pre code { background: none; padding: 0; }
+.msg-meta { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+.msg-user .msg-meta { color: rgba(255,255,255,0.5); text-align: right; }
+
+.pm-typing {
+  font-size: 11px; color: var(--text-muted); padding: 4px 12px;
+  max-height: 40px; overflow: hidden; white-space: pre-wrap;
+  border-top: 1px solid var(--border); background: var(--surface-2);
+}
+.thinking-dots { display: inline-flex; gap: 3px; margin-right: 6px; }
+.thinking-dots span {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted);
+  animation: bounce 1.4s infinite ease-in-out;
+}
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+
+.chat-input {
+  display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border);
+}
+.chat-input textarea {
+  flex: 1; resize: none; min-height: 36px; max-height: 100px;
+  padding: 8px 10px; font-size: 13px;
+}
+.chat-input button { min-width: 60px; }
+
+/* Right panel */
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Status bar */
 .status-bar {
-  display: flex; gap: 16px; align-items: center;
-  padding: 12px 16px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; margin-bottom: 20px;
+  display: flex; gap: 14px; align-items: center;
+  padding: 8px 14px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; flex-shrink: 0;
 }
-.status-bar .stat { text-align: center; }
-.status-bar .stat-value { font-size: 20px; font-weight: 700; }
-.status-bar .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-.status-bar .active-indicator {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 12px; border-radius: 6px; background: var(--surface-2);
-}
-.status-bar .active-dot {
-  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.stat-value { font-size: 18px; font-weight: 700; }
+.stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
-.filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-.filter-btn {
-  padding: 4px 12px; border-radius: 4px; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text-muted); cursor: pointer;
-  font-family: inherit; font-size: 12px; transition: all 0.15s;
+/* Agent Grid */
+.agent-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex-shrink: 0;
 }
-.filter-btn:hover { border-color: var(--accent); color: var(--text); }
-.filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-
-.task-list { display: flex; flex-direction: column; gap: 8px; }
-.task-card {
+.agent-panel {
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-  padding: 12px 16px; cursor: pointer; transition: all 0.15s;
+  padding: 10px; display: flex; flex-direction: column; gap: 6px;
 }
-.task-card:hover { border-color: var(--accent); }
-.task-card.expanded { border-color: var(--accent); }
-.task-header { display: flex; align-items: center; gap: 10px; }
-.task-id { color: var(--text-muted); font-size: 12px; min-width: 40px; }
-.task-title { flex: 1; font-weight: 500; }
-.task-meta { display: flex; gap: 6px; align-items: center; }
-.task-time { color: var(--text-muted); font-size: 11px; }
-.task-detail {
-  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+.agent-header { display: flex; align-items: center; gap: 8px; }
+.agent-name { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0;
 }
-.task-detail-section { margin-bottom: 8px; }
-.task-detail-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
-.task-detail-content {
-  font-size: 13px; white-space: pre-wrap; line-height: 1.5;
-  background: var(--surface-2); padding: 8px 12px; border-radius: 4px;
+.status-dot.stopped { background: #6b7280; }
+.status-dot.starting { background: var(--orange); animation: pulse 1.5s ease-in-out infinite; }
+.status-dot.ready { background: var(--green); }
+.status-dot.processing { background: var(--blue); animation: pulse 1s ease-in-out infinite; }
+.status-dot.error { background: var(--red); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.agent-stats { font-size: 10px; color: var(--text-muted); display: flex; gap: 10px; margin-left: auto; }
+.agent-task {
+  background: var(--surface-2); border-radius: 4px; padding: 4px 8px;
+  font-size: 11px; display: flex; align-items: center; gap: 6px;
 }
-.task-chain { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-.task-chain-item { font-size: 11px; color: var(--text-muted); }
-.task-chain-arrow { color: var(--border); font-size: 10px; }
-.empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+.agent-task-id { color: var(--text-muted); }
+.agent-activity {
+  background: #0d0f14; border: 1px solid var(--border); border-radius: 4px;
+  padding: 6px 8px; font-size: 11px; line-height: 1.3;
+  max-height: 60px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+  color: var(--text-muted); min-height: 24px;
+}
+.agent-activity.has-content { color: var(--text); }
+.tool-list { display: flex; flex-direction: column; gap: 2px; max-height: 50px; overflow-y: auto; }
+.tool-entry { font-size: 10px; color: var(--text-muted); display: flex; gap: 4px; }
+.tool-name { color: var(--accent); font-weight: 600; }
+.tool-input { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.agent-error { font-size: 10px; color: var(--red); background: #1a0505; padding: 3px 6px; border-radius: 3px; }
+.agent-controls { display: flex; gap: 4px; }
+.agent-controls button {
+  padding: 2px 8px; font-size: 10px; border-radius: 3px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted); cursor: pointer; font-family: inherit;
+}
+.agent-controls button:hover { border-color: var(--accent); color: var(--text); }
+
+/* MCP Activity Strip */
+.mcp-strip {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; flex-shrink: 0;
+}
+.mcp-strip-header {
+  font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 4px;
+}
+.mcp-strip-list { display: flex; flex-direction: column; gap: 1px; max-height: 100px; overflow-y: auto; }
+.mcp-entry { font-size: 10px; display: flex; gap: 6px; align-items: baseline; color: var(--text-muted); }
+.mcp-time { min-width: 50px; }
+.mcp-agent { font-weight: 600; min-width: 45px; }
+.mcp-tool { color: var(--accent); }
+
+/* Task List */
+.task-section {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px;
+}
+.section-header {
+  font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 6px;
+}
+.task-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+.task-row {
+  display: flex; gap: 6px; align-items: center; font-size: 11px;
+  padding: 4px 6px; border-radius: 4px; cursor: pointer;
+}
+.task-row:hover { background: var(--surface-2); }
+.task-id { color: var(--text-muted); min-width: 30px; }
+.task-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-time { color: var(--text-muted); font-size: 10px; }
+
+/* Badges */
+.badge {
+  display: inline-block; padding: 1px 6px; border-radius: 3px;
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.badge-pending { background: #374151; color: #9ca3af; }
+.badge-active { background: #1e3a5f; color: var(--blue); }
+.badge-done { background: #14532d; color: var(--green); }
+.badge-failed { background: #7f1d1d; color: var(--red); }
+.badge-pm { background: #2e1065; color: var(--purple); }
+.badge-dev { background: #1e3a5f; color: var(--blue); }
+.badge-review { background: #431407; color: var(--orange); }
+.badge-qc { background: #14532d; color: var(--green); }
+
+/* Agent Detail Modal */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7); z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-panel {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  width: 85%; max-width: 900px; height: 85vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.modal-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+.modal-close {
+  margin-left: auto; background: none; border: none; color: var(--text-muted);
+  font-size: 20px; cursor: pointer; padding: 4px 8px;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body {
+  flex: 1; overflow-y: auto; padding: 12px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.modal-section-label {
+  font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 4px;
+}
+.modal-stream {
+  background: #080a0e; border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px 12px; font-size: 12px; line-height: 1.4;
+  min-height: 60px; max-height: 200px; overflow-y: auto;
+  white-space: pre-wrap; word-break: break-word;
+  color: var(--green); font-family: 'SF Mono','Fira Code',monospace;
+}
+.modal-stream.empty { color: var(--text-muted); }
+.modal-messages {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 300px; overflow-y: auto;
+}
+.modal-msg {
+  padding: 6px 10px; border-radius: 6px; font-size: 12px; line-height: 1.5;
+}
+.modal-msg-user { background: var(--accent); color: #fff; align-self: flex-end; max-width: 85%; }
+.modal-msg-assistant { background: var(--surface); border: 1px solid var(--border); max-width: 85%; }
+.modal-msg-assistant :is(p,ul,ol,pre) { margin: 4px 0; }
+.modal-msg-assistant code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+.modal-msg-assistant pre { background: var(--bg); padding: 6px; border-radius: 4px; overflow-x: auto; }
+.modal-msg-activity { background: #1a2332; color: var(--blue); font-size: 11px; font-style: italic; }
+.modal-msg-meta { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+.modal-tools {
+  display: flex; flex-direction: column; gap: 3px;
+  max-height: 200px; overflow-y: auto;
+}
+.modal-tool {
+  display: flex; gap: 8px; font-size: 11px; padding: 4px 8px;
+  background: var(--surface); border-radius: 4px; cursor: pointer;
+}
+.modal-tool:hover { background: var(--surface-2); }
+.modal-tool-time { color: var(--text-muted); min-width: 55px; }
+.modal-tool-name { color: var(--accent); font-weight: 600; min-width: 120px; }
+.modal-tool-input { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-tool-detail {
+  font-size: 10px; background: var(--bg); padding: 6px 8px; border-radius: 4px;
+  white-space: pre-wrap; word-break: break-all; max-height: 150px; overflow-y: auto;
+  margin-top: 4px;
+}
 {% endblock %}
 
 {% block content %}
-<div x-data="dashboard()" x-init="init()">
+<div x-data="forge()" x-init="init()" class="forge-layout">
 
-  <!-- Status Bar -->
-  <div class="status-bar">
-    <div class="stat">
-      <div class="stat-value" x-text="counts.pending || 0"></div>
-      <div class="stat-label">Pending</div>
+  <!-- ═══ LEFT: Chat ═══ -->
+  <div class="chat-panel">
+    <div class="chat-header">
+      <span class="status-dot" :class="agents.pm?.status || 'stopped'"></span>
+      <span>PM Agent</span>
+      <span x-text="agents.pm?.status || 'stopped'"></span>
+      <span style="margin-left:auto" x-text="'$' + (agents.pm?.total_cost_usd || 0).toFixed(4)"></span>
     </div>
-    <div class="stat">
-      <div class="stat-value" style="color: var(--blue)" x-text="counts.active || 0"></div>
-      <div class="stat-label">Active</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" style="color: var(--green)" x-text="counts.done || 0"></div>
-      <div class="stat-label">Done</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" style="color: var(--red)" x-text="counts.failed || 0"></div>
-      <div class="stat-label">Failed</div>
-    </div>
-    <div style="flex:1"></div>
-    <template x-if="status.active_task">
-      <div class="active-indicator">
-        <div class="active-dot"></div>
-        <span class="badge" :class="'badge-' + status.active_task.type" x-text="status.active_task.type"></span>
-        <span style="font-size: 13px" x-text="status.active_task.title.substring(0, 40)"></span>
-      </div>
-    </template>
-    <template x-if="!status.active_task">
-      <div class="active-indicator" style="color: var(--text-muted)">
-        <span style="font-size: 13px">Idle</span>
-      </div>
-    </template>
-  </div>
 
-  <!-- Filters -->
-  <div class="filters">
-    <button class="filter-btn" :class="{ active: !filterType && !filterStatus }" @click="filterType=''; filterStatus=''">All</button>
-    <span style="color: var(--border)">|</span>
-    <template x-for="t in ['pm','dev','review','qc']">
-      <button class="filter-btn" :class="{ active: filterType === t }" @click="filterType = filterType === t ? '' : t" x-text="t"></button>
-    </template>
-    <span style="color: var(--border)">|</span>
-    <template x-for="s in ['pending','active','done','failed']">
-      <button class="filter-btn" :class="{ active: filterStatus === s }" @click="filterStatus = filterStatus === s ? '' : s" x-text="s"></button>
-    </template>
-  </div>
-
-  <!-- Task List -->
-  <div class="task-list">
-    <template x-if="filteredTasks.length === 0">
-      <div class="empty-state">No tasks yet. Start a conversation in PM Chat.</div>
-    </template>
-    <template x-for="task in filteredTasks" :key="task.id">
-      <div class="task-card" :class="{ expanded: expandedId === task.id }" @click="expandedId = expandedId === task.id ? null : task.id">
-        <div class="task-header">
-          <span class="task-id">#<span x-text="task.id"></span></span>
-          <span class="badge" :class="'badge-' + task.type" x-text="task.type"></span>
-          <span class="task-title" x-text="task.title"></span>
-          <div class="task-meta">
-            <span class="badge" :class="'badge-' + task.status" x-text="task.status"></span>
-            <span class="task-time" x-text="timeAgo(task.created_at)"></span>
-          </div>
+    <div class="chat-messages" x-ref="chatMessages">
+      <template x-if="chatMessages.length === 0 && !thinking">
+        <div style="text-align:center; padding:30px; color:var(--text-muted);">
+          <div style="font-size:16px; margin-bottom:8px;">Talk to your PM</div>
+          <div style="font-size:12px;">Describe what you want to build.</div>
         </div>
+      </template>
+      <template x-for="msg in chatMessages" :key="msg.id">
+        <div class="msg" :class="'msg-' + msg.role">
+          <template x-if="msg.role === 'pm'">
+            <div x-html="renderMd(msg.content)"></div>
+          </template>
+          <template x-if="msg.role !== 'pm'">
+            <div x-text="msg.content"></div>
+          </template>
+          <div class="msg-meta" x-text="formatTime(msg.created_at)"></div>
+        </div>
+      </template>
+      <template x-if="thinking">
+        <div style="padding:6px 12px; color:var(--text-muted); font-size:12px;">
+          <span class="thinking-dots"><span></span><span></span><span></span></span>
+          PM is thinking...
+        </div>
+      </template>
+    </div>
 
-        <template x-if="expandedId === task.id">
-          <div class="task-detail">
-            <template x-if="task.description">
-              <div class="task-detail-section">
-                <div class="task-detail-label">Description</div>
-                <div class="task-detail-content" x-text="task.description"></div>
-              </div>
-            </template>
-            <template x-if="task.note">
-              <div class="task-detail-section">
-                <div class="task-detail-label">Agent Response</div>
-                <div class="task-detail-content" x-html="renderMd(task.note)"></div>
-              </div>
-            </template>
-            <div style="display: flex; gap: 16px; font-size: 12px; color: var(--text-muted);">
-              <span>Created by: <strong x-text="task.created_by || 'user'"></strong></span>
-              <span>Priority: <strong x-text="task.priority"></strong></span>
-              <template x-if="task.parent_id">
-                <span>Parent: <strong>#<span x-text="task.parent_id"></span></strong></span>
+    <template x-if="pmActivity && thinking">
+      <div class="pm-typing" x-text="pmActivity.substring(pmActivity.length - 150)"></div>
+    </template>
+
+    <div class="chat-input">
+      <textarea
+        x-model="chatInput"
+        @keydown.enter.prevent="if (!$event.shiftKey) sendChat()"
+        placeholder="Describe what you want..."
+        rows="1"
+        @input="$event.target.style.height='auto'; $event.target.style.height=Math.min($event.target.scrollHeight,100)+'px'"
+      ></textarea>
+      <button class="btn btn-primary" @click="sendChat()" :disabled="!chatInput.trim() || chatSending" x-text="chatSending ? '...' : 'Send'"></button>
+    </div>
+  </div>
+
+  <!-- ═══ RIGHT: Dashboard ═══ -->
+  <div class="right-panel">
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div><div class="stat-value" x-text="taskCounts.pending || 0"></div><div class="stat-label">Pending</div></div>
+      <div><div class="stat-value" style="color:var(--blue)" x-text="taskCounts.active || 0"></div><div class="stat-label">Active</div></div>
+      <div><div class="stat-value" style="color:var(--green)" x-text="taskCounts.done || 0"></div><div class="stat-label">Done</div></div>
+      <div><div class="stat-value" style="color:var(--red)" x-text="taskCounts.failed || 0"></div><div class="stat-label">Failed</div></div>
+      <div style="flex:1"></div>
+      <template x-if="activeTask">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div class="status-dot processing"></div>
+          <span class="badge" :class="'badge-'+activeTask.type" x-text="activeTask.type"></span>
+          <span style="font-size:12px" x-text="activeTask.title.substring(0,30)"></span>
+        </div>
+      </template>
+    </div>
+
+    <!-- Agent Grid -->
+    <div class="agent-grid">
+      <template x-for="type in ['pm','dev','review','qc']" :key="type">
+        <div class="agent-panel" @click="openAgent(type)" style="cursor:pointer">
+          <div class="agent-header">
+            <div class="status-dot" :class="agents[type]?.current_task ? 'processing' : (agents[type]?.status || 'stopped')"></div>
+            <span class="agent-name badge" :class="'badge-'+type" x-text="type"></span>
+            <span style="font-size:10px; color:var(--text-muted)" x-text="agents[type]?.current_task ? 'working' : (agents[type]?.status || 'stopped')"></span>
+            <div class="agent-stats">
+              <span x-text="'$'+(agents[type]?.total_cost_usd||0).toFixed(3)"></span>
+              <span x-text="(agents[type]?.total_turns||0)+'t'"></span>
+            </div>
+          </div>
+          <template x-if="agents[type]?.current_task">
+            <div class="agent-task">
+              <span class="agent-task-id">#<span x-text="agents[type].current_task.id"></span></span>
+              <span x-text="agents[type].current_task.title.substring(0,50)"></span>
+            </div>
+          </template>
+          <div class="agent-activity"
+               :class="{'has-content': agents[type]?.current_activity || agents[type]?.status==='processing'}"
+               x-text="agents[type]?.current_activity || (agents[type]?.status==='processing' ? 'Working...' : agents[type]?.status==='ready' && agents[type]?.current_task ? 'Processing task...' : agents[type]?.status==='ready' ? 'Idle — waiting for task' : agents[type]?.status || '...')"
+               x-effect="if(agents[type]?.current_activity) $el.scrollTop=$el.scrollHeight">
+          </div>
+          <template x-if="agents[type]?.tool_calls?.length">
+            <div class="tool-list">
+              <template x-for="tc in agents[type].tool_calls.slice(-2)" :key="tc.ts">
+                <div class="tool-entry">
+                  <span class="tool-name" x-text="tc.tool.replace('mcp__forge-'+type+'__','')"></span>
+                  <span class="tool-input" x-text="toolSummary(tc)"></span>
+                </div>
               </template>
             </div>
+          </template>
+          <template x-if="agents[type]?.error_message">
+            <div class="agent-error" x-text="agents[type].error_message"></div>
+          </template>
+          <div class="agent-controls">
+            <template x-if="agents[type]?.is_alive">
+              <button @click.stop="agentAction(type,'stop')">Stop</button>
+            </template>
+            <template x-if="!agents[type]?.is_alive">
+              <button @click.stop="agentAction(type,'start')">Start</button>
+            </template>
+            <button @click.stop="agentAction(type,'start')">Restart</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- MCP Activity -->
+    <div class="mcp-strip">
+      <div class="mcp-strip-header">MCP Activity</div>
+      <div class="mcp-strip-list">
+        <template x-if="mcpActivity.length===0">
+          <div style="font-size:10px; color:var(--text-muted)">No tool calls yet.</div>
+        </template>
+        <template x-for="e in mcpActivity.slice(-15).reverse()" :key="e.ts">
+          <div class="mcp-entry">
+            <span class="mcp-time" x-text="fmtTime(e.ts)"></span>
+            <span class="mcp-agent badge" :class="'badge-'+e.agent" x-text="e.agent"></span>
+            <span class="mcp-tool" x-text="e.tool.replace(/^mcp__forge-\w+__/,'')"></span>
+            <span class="tool-input" x-text="toolSummary(e)"></span>
           </div>
         </template>
       </div>
-    </template>
+    </div>
+
+    <!-- Task List -->
+    <div class="task-section">
+      <div class="section-header">Tasks</div>
+      <div class="task-list">
+        <template x-if="tasks.length===0">
+          <div style="font-size:11px; color:var(--text-muted); padding:10px; text-align:center;">No tasks yet.</div>
+        </template>
+        <template x-for="t in tasks" :key="t.id">
+          <div class="task-row">
+            <span class="task-id">#<span x-text="t.id"></span></span>
+            <span class="badge" :class="'badge-'+t.type" x-text="t.type"></span>
+            <span class="badge" :class="'badge-'+t.status" x-text="t.status"></span>
+            <span class="task-title" x-text="t.title"></span>
+            <span class="task-time" x-text="timeAgo(t.created_at)"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
   </div>
+
+  <!-- ═══ AGENT DETAIL MODAL ═══ -->
+  <template x-if="selectedAgent">
+    <div class="modal-overlay" @click.self="closeAgent()">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <div class="status-dot" :class="agentDetail.current_task ? 'processing' : (agentDetail.status || 'stopped')"></div>
+          <span class="badge" :class="'badge-'+selectedAgent" x-text="selectedAgent" style="font-size:14px;"></span>
+          <span style="font-size:12px; color:var(--text-muted)" x-text="agentDetail.current_task ? 'working' : (agentDetail.status || '')"></span>
+          <span style="font-size:11px; color:var(--text-muted)" x-text="'$'+(agentDetail.total_cost_usd||0).toFixed(4)"></span>
+          <span style="font-size:11px; color:var(--text-muted)" x-text="(agentDetail.total_turns||0)+' turns'"></span>
+          <span style="font-size:11px; color:var(--text-muted)" x-text="agentDetail.model_used||''"></span>
+          <button class="modal-close" @click="closeAgent()">&times;</button>
+        </div>
+        <div class="modal-body">
+
+          <!-- Live Stream -->
+          <div>
+            <div class="modal-section-label">Live Stream</div>
+            <div class="modal-stream"
+                 :class="{'empty': !agentDetail.current_activity}"
+                 x-text="agentDetail.current_activity || (agentDetail.status==='processing' ? 'Working...' : 'Waiting for activity...')"
+                 x-ref="modalStream"
+                 x-effect="if(agentDetail.current_activity && $refs.modalStream) $refs.modalStream.scrollTop=$refs.modalStream.scrollHeight">
+            </div>
+          </div>
+
+          <!-- Messages -->
+          <div>
+            <div class="modal-section-label">Messages (<span x-text="agentDetail.messages?.length||0"></span>)</div>
+            <div class="modal-messages" x-ref="modalMsgs"
+                 x-effect="if(agentDetail.messages?.length && $refs.modalMsgs) $refs.modalMsgs.scrollTop=$refs.modalMsgs.scrollHeight">
+              <template x-for="(msg,i) in (agentDetail.messages||[])" :key="i">
+                <div class="modal-msg"
+                     :class="{'modal-msg-user': msg.role==='user', 'modal-msg-assistant': msg.role==='assistant', 'modal-msg-activity': msg.role==='activity'}">
+                  <template x-if="msg.role==='assistant'">
+                    <div x-html="renderMd(msg.content)"></div>
+                  </template>
+                  <template x-if="msg.role!=='assistant'">
+                    <div x-text="msg.content.substring(0,500)"></div>
+                  </template>
+                  <div class="modal-msg-meta" x-text="fmtTime(msg.ts)"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Tool Calls -->
+          <div>
+            <div class="modal-section-label">Tool Calls (<span x-text="agentDetail.tool_calls?.length||0"></span>)</div>
+            <div class="modal-tools">
+              <template x-for="(tc,i) in (agentDetail.tool_calls||[]).slice().reverse()" :key="tc.ts+i">
+                <div>
+                  <div class="modal-tool" @click="expandedTool = expandedTool===tc.ts ? null : tc.ts">
+                    <span class="modal-tool-time" x-text="fmtTime(tc.ts)"></span>
+                    <span class="modal-tool-name" x-text="tc.tool.replace(/^mcp__forge-\w+__/,'')"></span>
+                    <span class="modal-tool-input" x-text="toolSummary(tc)"></span>
+                  </div>
+                  <template x-if="expandedTool===tc.ts">
+                    <div class="modal-tool-detail" x-text="JSON.stringify(tc.input, null, 2)"></div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </template>
+
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function dashboard() {
+function forge() {
   return {
+    // Agent state
+    agents: {},
+    taskCounts: {},
+    activeTask: null,
+    mcpActivity: [],
     tasks: [],
-    status: {},
-    counts: {},
-    filterType: '',
-    filterStatus: '',
-    expandedId: null,
+    _lastMcpTs: '',
 
-    get filteredTasks() {
-      return this.tasks.filter(t => {
-        if (this.filterType && t.type !== this.filterType) return false;
-        if (this.filterStatus && t.status !== this.filterStatus) return false;
-        return true;
-      });
-    },
+    // Chat state
+    chatMessages: [],
+    chatInput: '',
+    chatSending: false,
+    thinking: false,
+    pmActivity: '',
+    _lastChatId: 0,
+
+    // Modal state
+    selectedAgent: null,
+    agentDetail: {},
+    expandedTool: null,
+    _modalInterval: null,
 
     async init() {
-      await this.refresh();
-      setInterval(() => this.refresh(), 5000);
+      // Load chat history
+      try {
+        const msgs = await fetch('/api/chat/?project_id=1&after=0').then(r=>r.json());
+        this.chatMessages = msgs;
+        if (msgs.length) this._lastChatId = msgs[msgs.length-1].id;
+        const last = msgs[msgs.length-1];
+        if (last && last.role === 'user') this.thinking = true;
+      } catch {}
+
+      // Start polling loops
+      this.pollAgents();
+      this.pollChat();
+      setInterval(() => this.pollAgents(), 600);
+      setInterval(() => this.pollChat(), 1500);
+      setInterval(() => this.pollTasks(), 3000);
     },
 
-    async refresh() {
+    // ── Agent polling (600ms) ──
+    async pollAgents() {
       try {
-        const [tasks, status] = await Promise.all([
-          fetch('/api/tasks/').then(r => r.json()),
-          fetch('/api/status/').then(r => r.json()),
+        const data = await fetch('/api/agents/status/').then(r=>r.json());
+        this.agents = data.agents || {};
+        this.taskCounts = data.task_counts || {};
+        this.activeTask = data.active_task;
+        this.pmActivity = this.agents.pm?.current_activity || '';
+        if (this.agents.pm?.status === 'processing') this.thinking = true;
+      } catch {}
+    },
+
+    // ── Chat polling (1.5s) ──
+    async pollChat() {
+      try {
+        const msgs = await fetch(`/api/chat/?project_id=1&after=${this._lastChatId}`).then(r=>r.json());
+        for (const msg of msgs) {
+          if (!this.chatMessages.find(m => m.id === msg.id)) {
+            this.chatMessages.push(msg);
+            if (msg.role === 'pm') this.thinking = false;
+          }
+          this._lastChatId = Math.max(this._lastChatId, msg.id);
+        }
+        if (msgs.length) this.$nextTick(() => this.scrollChat());
+      } catch {}
+    },
+
+    // ── Task + MCP polling (3s) ──
+    async pollTasks() {
+      try {
+        const [tasks, mcp] = await Promise.all([
+          fetch('/api/tasks/').then(r=>r.json()),
+          fetch('/api/mcp-activity/?since='+encodeURIComponent(this._lastMcpTs)+'&limit=20').then(r=>r.json()),
         ]);
-        // Sort: active first, then pending, then by created_at desc
-        tasks.sort((a, b) => {
-          const order = { active: 0, pending: 1, done: 2, failed: 3 };
-          const oa = order[a.status] ?? 9, ob = order[b.status] ?? 9;
-          if (oa !== ob) return oa - ob;
-          return new Date(b.created_at) - new Date(a.created_at);
+        tasks.sort((a,b) => {
+          const o = {active:0,pending:1,done:2,failed:3};
+          return (o[a.status]??9) - (o[b.status]??9) || new Date(b.created_at) - new Date(a.created_at);
         });
         this.tasks = tasks;
-        this.status = status;
-        this.counts = status.task_counts || {};
-      } catch (e) {
-        console.error('refresh error:', e);
-      }
+        if (mcp.activity?.length) {
+          const seen = new Set(this.mcpActivity.map(e=>e.ts));
+          for (const e of mcp.activity) if (!seen.has(e.ts)) this.mcpActivity.push(e);
+          this.mcpActivity = this.mcpActivity.slice(-50);
+          this._lastMcpTs = this.mcpActivity[this.mcpActivity.length-1]?.ts || '';
+        }
+      } catch {}
     },
 
+    // ── Chat send ──
+    async sendChat() {
+      const content = this.chatInput.trim();
+      if (!content) return;
+      this.chatSending = true;
+      this.chatInput = '';
+      try {
+        const res = await fetch('/api/chat/', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+          body: JSON.stringify({project_id:1, content, role:'user'}),
+        });
+        const msg = await res.json();
+        if (!this.chatMessages.find(m => m.id === msg.id)) {
+          this.chatMessages.push(msg);
+          this._lastChatId = Math.max(this._lastChatId, msg.id);
+        }
+        this.thinking = true;
+        this.$nextTick(() => this.scrollChat());
+      } catch (e) { console.error('send error:', e); }
+      this.chatSending = false;
+    },
+
+    scrollChat() {
+      const el = this.$refs.chatMessages;
+      if (el) el.scrollTop = el.scrollHeight;
+    },
+
+    async agentAction(type, action) {
+      try {
+        await fetch(`/api/agents/${type}/${action}/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+      } catch {}
+    },
+
+    // ── Agent Detail Modal ──
+    openAgent(type) {
+      this.selectedAgent = type;
+      this.agentDetail = {};
+      this.expandedTool = null;
+      this.pollAgentDetail();
+      this._modalInterval = setInterval(() => this.pollAgentDetail(), 800);
+    },
+    closeAgent() {
+      this.selectedAgent = null;
+      this.agentDetail = {};
+      if (this._modalInterval) { clearInterval(this._modalInterval); this._modalInterval = null; }
+    },
+    async pollAgentDetail() {
+      if (!this.selectedAgent) return;
+      try {
+        const d = await fetch(`/api/agents/${this.selectedAgent}/`).then(r=>r.json());
+        this.agentDetail = d;
+      } catch {}
+    },
+
+    // ── Helpers ──
+    toolSummary(tc) {
+      if (!tc.input) return '';
+      const i = tc.input;
+      if (tc.tool.includes('task_create')) return `type=${i.type} "${(i.title||'').substring(0,35)}"`;
+      if (tc.tool.includes('task_update')) return `#${i.task_id} ${i.status}`;
+      if (tc.tool.includes('chat_reply')) return `"${(i.content||'').substring(0,45)}"`;
+      if (tc.tool==='Edit') return i.file_path||'';
+      if (tc.tool==='Bash') return (i.command||'').substring(0,40);
+      if (tc.tool==='Read'||tc.tool==='Write') return i.file_path||'';
+      const v = Object.values(i).find(v=>typeof v==='string');
+      return v ? v.substring(0,40) : '';
+    },
+    fmtTime(iso) {
+      if (!iso) return '';
+      try { return new Date(iso).toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}); } catch { return ''; }
+    },
+    formatTime(iso) {
+      try { return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); } catch { return ''; }
+    },
     timeAgo(iso) {
-      const s = Math.floor((Date.now() - new Date(iso)) / 1000);
-      if (s < 60) return s + 's ago';
-      if (s < 3600) return Math.floor(s / 60) + 'm ago';
-      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-      return Math.floor(s / 86400) + 'd ago';
+      const s = Math.floor((Date.now()-new Date(iso))/1000);
+      if (s<60) return s+'s';
+      if (s<3600) return Math.floor(s/60)+'m';
+      if (s<86400) return Math.floor(s/3600)+'h';
+      return Math.floor(s/86400)+'d';
     },
-
     renderMd(text) {
       if (!text) return '';
       try { return marked.parse(text); } catch { return text; }
     },
   };
 }
+function getCookie(n) { const v=document.cookie.match('(^|;)\\s*'+n+'\\s*=\\s*([^;]+)'); return v?v.pop():''; }
 </script>
 {% endblock %}

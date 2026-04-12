@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start all Forge services: Xvfb, Django, and 4 agents.
+# Start all Forge services: Xvfb, Django, and 4 agents via ClaudeCodeManager.
 set -euo pipefail
 
 FORGE_DIR="/opt/forge"
@@ -31,14 +31,15 @@ su - "$USER" -c "screen -dmS forge-django bash -c '\
   exec gunicorn forge_ui.asgi:application -c gunicorn.conf.py'"
 sleep 3
 
-# 3. Start agents (staggered — each takes ~20s for screen + auto-accept + MCP init)
-for agent in pm dev review qc; do
-  echo "Starting forge-${agent}..."
-  "${FORGE_DIR}/start-agent.sh" "$agent"
-  sleep 25
-done
+# 3. Start agents via ClaudeCodeManager (replaces screen-based agent startup)
+echo "Starting agents via ClaudeCodeManager..."
+su - "$USER" -c "screen -dmS forge-agents bash -c '\
+  cd ${FORGE_DIR}/ui && \
+  source ${FORGE_DIR}/venv/bin/activate && \
+  exec python manage.py start_forge'"
+sleep 5
 
 echo "=== Forge fully started ==="
 echo "UI: http://localhost:8100"
-echo "Agents: forge-pm, forge-dev, forge-review, forge-qc"
-echo "Check: su - forge -c 'screen -ls'"
+echo "Agents: managed by ClaudeCodeManager (screen -r forge-agents to monitor)"
+echo "Dashboard: http://localhost:8100/ (live multi-panel view)"

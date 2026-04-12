@@ -1,1 +1,1 @@
-{"mcpServers":{"forge-review-channel":{"command":"/home/forge/.bun/bin/bun","args":["/opt/forge/forge-channel.ts","--type","review"]}}}
+{"mcpServers": {"forge-review": {"command": "/home/forge/.bun/bin/bun", "args": ["/opt/forge/forge-mcp-server.ts", "--type", "review"], "env": {"FORGE_SECRET": "d597a6f89cf5052ed92c0b09023745fc6987f459a625cf9dc9cb69cdd3cb58f1"}}}}
