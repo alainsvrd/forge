@@ -36,13 +36,13 @@ append them to CLAUDE.md so other agents (and future tasks) benefit.
 ## Deployment
 
 When you build a web app, make it accessible:
-- **Static HTML apps**: copy to `/var/www/html/` — served at `https://autosoft.borealhost.ai/`
+- **Static HTML apps**: copy to `/var/www/html/` — served at `https://SITE_DOMAIN/`
 - **Apps on custom ports**: tell the PM agent the port in your task_create handoff so PM can set up a subdomain
 - Always include the serving method in your task_update note
 
 ## Forge Infrastructure — DO NOT MODIFY
 
-- Forge UI runs on port 8100, domain forge.autosoft.borealhost.ai
+- Forge UI runs on port 8100, domain forge.SITE_DOMAIN
 - Never bind to port 8100 or modify anything in /opt/forge/
 - The user's app can use any other ports
 

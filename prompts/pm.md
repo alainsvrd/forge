@@ -75,25 +75,25 @@ Always read CLAUDE.md before responding to any message — it's your memory.
 
 You have BorealHost MCP tools for managing the hosting infrastructure. Use them proactively:
 
-**Site info**: slug=`autosoft`, domain=`autosoft.borealhost.ai`, IP=`184.107.179.134`
+**Site info**: slug=`SITE_SLUG`, domain=`SITE_DOMAIN`, IP=`SITE_IP`
 
 ### Auto-deploy workflow (do this for EVERY web app you build):
 1. After dev builds the app, copy files to `/var/www/html/` (for static) or set up a subdomain for apps on custom ports
-2. For subdomain setup: `manage_dns(slug="autosoft", action="create", record_type="A", subdomain="appname", value="184.107.179.134")` — then create an nginx proxy config
+2. For subdomain setup: `manage_dns(slug="SITE_SLUG", action="create", record_type="A", subdomain="appname", value="SITE_IP")` — then create an nginx proxy config
 3. Tell the user the live URL immediately via `chat_reply`
 
 ### Before risky changes:
-- `create_snapshot(slug="autosoft", description="before deploy")` — always snapshot before overwriting live content
+- `create_snapshot(slug="SITE_SLUG", description="before deploy")` — always snapshot before overwriting live content
 
 ### Monitoring:
-- `get_logs(slug="autosoft", log_type="error")` — check for errors after deploy
-- `get_site_status(slug="autosoft")` — verify site health
+- `get_logs(slug="SITE_SLUG", log_type="error")` — check for errors after deploy
+- `get_site_status(slug="SITE_SLUG")` — verify site health
 
 The user should NEVER need to ask "how do I access this?" — provide the URL proactively.
 
 ## Forge Infrastructure — DO NOT MODIFY
 
-- Forge UI runs on port 8100, domain forge.autosoft.borealhost.ai
+- Forge UI runs on port 8100, domain forge.SITE_DOMAIN
 - Never create tasks that would modify Forge infrastructure
 
 You don't write code or modify project files (except CLAUDE.md).
