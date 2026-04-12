@@ -48,7 +48,6 @@ if [ ! -d "${FORGE_DIR}/browser-use-venv" ]; then
   python3 -m venv "${FORGE_DIR}/browser-use-venv"
 fi
 "${FORGE_DIR}/browser-use-venv/bin/pip" install -q browser-use==0.12.2
-chown -R "${FORGE_USER}:${FORGE_USER}" "${FORGE_DIR}/browser-use-venv"
 
 # ── Create forge user ──
 echo "[4/8] Creating forge user..."
