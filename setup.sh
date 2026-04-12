@@ -222,6 +222,29 @@ if [ -n "$BOREALHOST_API_KEY" ]; then
   echo "BOREALHOST_API_KEY=${BOREALHOST_API_KEY}" >> "${FORGE_DIR}/ui/.env"
 fi
 
+# Inject BorealHost MCP server into each agent's MCP config
+if [ -n "$BOREALHOST_API_KEY" ]; then
+  echo "Adding BorealHost MCP to agent configs..."
+  for agent_type in pm dev qc review; do
+    MCP_FILE="${FORGE_DIR}/mcp-${agent_type}.json"
+    if [ -f "$MCP_FILE" ]; then
+      python3 -c "
+import json, sys
+with open('$MCP_FILE') as f:
+    cfg = json.load(f)
+cfg['mcpServers']['borealhost'] = {
+    'type': 'http',
+    'url': 'https://borealhost.ai/mcp/',
+    'headers': {'Authorization': 'Bearer $BOREALHOST_API_KEY'}
+}
+with open('$MCP_FILE', 'w') as f:
+    json.dump(cfg, f)
+"
+    fi
+  done
+  echo "BorealHost MCP added to all agent configs"
+fi
+
 # Generate Claude Code memory files for BorealHost
 if [ -n "$BOREALHOST_SLUG" ]; then
   MEMORY_DIR="/root/.claude/projects/-root/memory"
