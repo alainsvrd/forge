@@ -46,6 +46,7 @@ class ClaudeCodeManager:
     _lock = threading.Lock()
     _watchdog_thread = None
     _watchdog_running = False
+    _last_event_at = {}  # agent_type -> time.time() of last stdout event
 
     # ── Agent lifecycle ─────────────────────────────────────────────────────
 
@@ -420,6 +421,9 @@ class ClaudeCodeManager:
                     event = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+
+                # Track last event time for watchdog
+                cls._last_event_at[agent_type] = time.time()
 
                 event_type = event.get('type', '')
 
@@ -809,37 +813,58 @@ class ClaudeCodeManager:
                         cls._deliver_pending_task(pending)
                         actions.append(f"delivered pending task #{pending.id} to {pending.type}")
 
-                # ── 4. Detect stuck processing agents ──
+                # ── 4. Detect stuck agents ──
                 for session in AgentSession.objects.filter(
                     current_task__isnull=False,
                 ):
-                    if not session.last_activity_at:
+                    if not cls.is_alive(session.agent_type):
                         continue
-                    idle_secs = (timezone.now() - session.last_activity_at).total_seconds()
+                    task = session.current_task
+                    if not task:
+                        continue
 
-                    # Agent alive but idle too long with a task
-                    if cls.is_alive(session.agent_type) and idle_secs > IDLE_NUDGE_SECONDS:
-                        task = session.current_task
-                        if task:
+                    if session.status == 'ready':
+                        # Agent finished processing but didn't hand off.
+                        # Use last_activity_at (DB save time).
+                        if not session.last_activity_at:
+                            continue
+                        idle_secs = (timezone.now() - session.last_activity_at).total_seconds()
+
+                        if idle_secs > IDLE_NUDGE_SECONDS:
                             cls.send_message(
                                 session.agent_type,
                                 f"REMINDER: You have task #{task.id}: {task.title}. "
                                 f"Call task_update(task_id={task.id}, status=..., note=...) to complete it."
                             )
-                            actions.append(f"nudged {session.agent_type} about task #{task.id}")
+                            actions.append(f"nudged idle {session.agent_type} about task #{task.id}")
 
-                    # Agent alive but stuck way too long — escalate to PM
-                    if cls.is_alive(session.agent_type) and idle_secs > IDLE_FORCE_SECONDS:
-                        task = session.current_task
-                        if task and cls.is_alive('pm'):
+                        if idle_secs > IDLE_FORCE_SECONDS and cls.is_alive('pm'):
                             cls.send_message(
                                 'pm',
-                                f"WATCHDOG ALERT: Agent {session.agent_type} has been stuck on "
-                                f"task #{task.id} ({task.title}) for {int(idle_secs)}s. "
-                                f"Use check_agents() and nudge_agent() to investigate, or "
-                                f"fail the task and reassign."
+                                f"WATCHDOG ALERT: Agent {session.agent_type} finished processing "
+                                f"but never handed off task #{task.id} ({task.title}). "
+                                f"Idle for {int(idle_secs)}s. Investigate with check_agents()."
                             )
-                            actions.append(f"escalated stuck {session.agent_type} to PM")
+                            actions.append(f"escalated idle {session.agent_type} to PM")
+
+                    elif session.status == 'processing':
+                        # Agent is "processing" — check if stdout is truly silent.
+                        # Only act if NO events received for 10+ minutes (long
+                        # enough that even the slowest Bash/browser commands finish).
+                        last_event = cls._last_event_at.get(session.agent_type)
+                        if not last_event:
+                            continue
+                        silent_secs = time.time() - last_event
+
+                        if silent_secs > 600 and cls.is_alive('pm'):
+                            cls.send_message(
+                                'pm',
+                                f"WATCHDOG ALERT: Agent {session.agent_type} has been in "
+                                f"'processing' state with ZERO stdout output for {int(silent_secs)}s "
+                                f"on task #{task.id} ({task.title}). The process may be hung. "
+                                f"Consider restarting the agent or failing the task."
+                            )
+                            actions.append(f"escalated silent {session.agent_type} to PM")
 
                 if actions:
                     logger.info(f"Watchdog actions: {', '.join(actions)}")
