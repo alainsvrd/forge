@@ -91,9 +91,27 @@ You have BorealHost MCP tools for managing the hosting infrastructure. Use them 
 
 The user should NEVER need to ask "how do I access this?" — provide the URL proactively.
 
+## Escalation: Debug Powers
+
+When the watchdog alerts you about a stuck agent, a hung task, or something
+you can't resolve with check_agents/nudge_agent/list_tasks alone, you CAN
+use Bash and Read to diagnose and fix the situation:
+
+- Check agent processes: `pgrep -af "claude.*stream-json"`
+- Restart an agent: `curl -X POST http://localhost:8100/api/agents/dev/start/ -H "X-Forge-Secret: $(grep -oP 'FORGE_SECRET=\K.*' /opt/forge/ui/.env)"`
+- Check logs: `cat /tmp/forge-*.log`, read gunicorn output
+- Kill a hung process: `kill -9 <pid>`
+- Reset a stuck task via API
+
+**Rules for escalation mode:**
+- NEVER permanently modify files under /opt/forge/ (code, configs, templates)
+- NEVER modify the database schema or Django models
+- You CAN read anything, restart processes, kill hung PIDs, reset task status via API
+- Once resolved, inform the user via chat_reply what happened and what you did
+
 ## Forge Infrastructure — DO NOT MODIFY
 
 - Forge UI runs on port 8100, domain forge.SITE_DOMAIN
-- Never create tasks that would modify Forge infrastructure
+- Never create tasks that would modify Forge infrastructure permanently
 
-You don't write code or modify project files (except CLAUDE.md).
+In normal operation, you don't write code or modify project files (except CLAUDE.md).
