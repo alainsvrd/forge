@@ -44,6 +44,8 @@ class ClaudeCodeManager:
     """
     _instances = {}  # agent_type -> {process, reader_thread, stderr_thread, session_id}
     _lock = threading.Lock()
+    _watchdog_thread = None
+    _watchdog_running = False
 
     # ── Agent lifecycle ─────────────────────────────────────────────────────
 
@@ -86,6 +88,13 @@ class ClaudeCodeManager:
                     ],
                     "env": {
                         "FORGE_SECRET": FORGE_SECRET,
+                    }
+                },
+                "borealhost": {
+                    "type": "http",
+                    "url": "https://borealhost.ai/mcp/",
+                    "headers": {
+                        "Authorization": f"Bearer {cls._get_borealhost_key()}",
                     }
                 }
             }
@@ -215,6 +224,9 @@ class ClaudeCodeManager:
             else:
                 # On resume, send a minimal ping to trigger init
                 cls.send_message(agent_type, 'Resumed. Standing by.')
+
+            # Auto-start watchdog whenever any agent starts
+            cls._start_watchdog()
 
             return True
 
@@ -679,6 +691,21 @@ class ClaudeCodeManager:
     # ── System prompt builder ───────────────────────────────────────────────
 
     @classmethod
+    @classmethod
+    def _get_borealhost_key(cls):
+        """Read BorealHost API key from .env file."""
+        env_file = os.path.join(FORGE_DIR, 'ui', '.env')
+        try:
+            with open(env_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('BOREALHOST_API_KEY='):
+                        return line.split('=', 1)[1]
+        except FileNotFoundError:
+            pass
+        return os.environ.get('BOREALHOST_API_KEY', '')
+
+    @classmethod
     def _build_system_prompt(cls, agent_type, session):
         """Build the --append-system-prompt content for an agent."""
         parts = []
@@ -705,3 +732,159 @@ class ClaudeCodeManager:
             parts.append('Use SendUserMessage regularly to keep the user informed of your progress.')
 
         return '\n'.join(parts)
+
+    # ── Watchdog ────────────────────────────────────────────────────────────
+
+    @classmethod
+    def _start_watchdog(cls):
+        """Start the background watchdog thread."""
+        if cls._watchdog_thread and cls._watchdog_thread.is_alive():
+            return
+        cls._watchdog_running = True
+        cls._watchdog_thread = threading.Thread(
+            target=cls._watchdog_loop,
+            daemon=True,
+            name='forge-watchdog',
+        )
+        cls._watchdog_thread.start()
+        logger.info("Watchdog started")
+
+    @classmethod
+    def _watchdog_loop(cls):
+        """
+        Background loop that monitors agent health and task flow:
+        1. Restart dead agents
+        2. Deliver orphaned pending tasks
+        3. Fail tasks stuck on dead agents
+        4. Escalate unresolvable issues to PM
+        """
+        from django.db import connection
+        from .models import AgentSession, Task
+
+        connection.close()
+        POLL_INTERVAL = 10  # seconds
+
+        while cls._watchdog_running:
+            try:
+                connection.ensure_connection()
+                actions = []
+
+                # ── 1. Restart dead agents ──
+                for session in AgentSession.objects.all():
+                    if not cls.is_alive(session.agent_type):
+                        if session.status not in ('stopped', 'error'):
+                            session.status = 'stopped'
+                            session.pid = None
+                            session.save(update_fields=['status', 'pid'])
+
+                        # Auto-restart
+                        logger.warning(f"Watchdog: agent {session.agent_type} is dead, restarting")
+                        cls.start_agent(session.agent_type, resume=True)
+                        actions.append(f"restarted {session.agent_type}")
+                        time.sleep(3)  # give it time to init
+
+                # ── 2. Fail tasks stuck on dead agents ──
+                active_tasks = Task.objects.filter(status='active')
+                for task in active_tasks:
+                    if not cls.is_alive(task.type):
+                        # Agent is dead with an active task — reset to pending
+                        task.status = 'pending'
+                        task.save(update_fields=['status'])
+                        AgentSession.objects.filter(
+                            agent_type=task.type, current_task=task
+                        ).update(current_task=None)
+                        actions.append(f"reset task #{task.id} to pending (agent {task.type} was dead)")
+                        logger.warning(f"Watchdog: reset task #{task.id} to pending")
+
+                # ── 3. Deliver orphaned pending tasks ──
+                # Only if no active tasks (sequential gate)
+                if not Task.objects.filter(status='active').exists():
+                    pending = (
+                        Task.objects
+                        .filter(status='pending')
+                        .order_by('created_at')
+                        .first()
+                    )
+                    if pending and cls.is_alive(pending.type):
+                        cls._deliver_pending_task(pending)
+                        actions.append(f"delivered pending task #{pending.id} to {pending.type}")
+
+                # ── 4. Detect stuck processing agents ──
+                for session in AgentSession.objects.filter(
+                    current_task__isnull=False,
+                ):
+                    if not session.last_activity_at:
+                        continue
+                    idle_secs = (timezone.now() - session.last_activity_at).total_seconds()
+
+                    # Agent alive but idle too long with a task
+                    if cls.is_alive(session.agent_type) and idle_secs > IDLE_NUDGE_SECONDS:
+                        task = session.current_task
+                        if task:
+                            cls.send_message(
+                                session.agent_type,
+                                f"REMINDER: You have task #{task.id}: {task.title}. "
+                                f"Call task_update(task_id={task.id}, status=..., note=...) to complete it."
+                            )
+                            actions.append(f"nudged {session.agent_type} about task #{task.id}")
+
+                    # Agent alive but stuck way too long — escalate to PM
+                    if cls.is_alive(session.agent_type) and idle_secs > IDLE_FORCE_SECONDS:
+                        task = session.current_task
+                        if task and cls.is_alive('pm'):
+                            cls.send_message(
+                                'pm',
+                                f"WATCHDOG ALERT: Agent {session.agent_type} has been stuck on "
+                                f"task #{task.id} ({task.title}) for {int(idle_secs)}s. "
+                                f"Use check_agents() and nudge_agent() to investigate, or "
+                                f"fail the task and reassign."
+                            )
+                            actions.append(f"escalated stuck {session.agent_type} to PM")
+
+                if actions:
+                    logger.info(f"Watchdog actions: {', '.join(actions)}")
+
+            except Exception as e:
+                logger.error(f"Watchdog error: {e}", exc_info=True)
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+
+            time.sleep(POLL_INTERVAL)
+
+    @classmethod
+    def _deliver_pending_task(cls, task):
+        """Deliver a pending task to its target agent (called by watchdog)."""
+        from .models import AgentSession
+        agent_type = task.type
+
+        parts = [
+            f'=== TASK #{task.id} ===',
+            f'Title: {task.title}',
+            f'Priority: {task.priority}',
+            f'Created by: {task.created_by}',
+            f'\nDescription:\n{task.description}',
+        ]
+        if task.parent_id:
+            from .views import _build_task_parent_chain
+            chain = _build_task_parent_chain(task.parent_id)
+            if chain:
+                parts.append('\n=== PARENT TASK CHAIN ===')
+                for t in chain:
+                    note_preview = (t['note'] or '')[:300]
+                    parts.append(
+                        f"#{t['id']} [{t['type']}/{t['status']}] {t['title']}"
+                        + (f"\n  Note: {note_preview}" if note_preview else "")
+                    )
+        parts.append(
+            f'\n\nProcess this task. When done, call task_update(task_id={task.id}, '
+            f'status="done"|"failed", note="...") then task_create() to hand off.'
+        )
+        message = '\n'.join(parts)
+
+        if cls.send_message(agent_type, message):
+            task.status = 'active'
+            task.save(update_fields=['status'])
+            AgentSession.objects.filter(agent_type=agent_type).update(current_task=task)
+            logger.info(f"Watchdog: delivered task #{task.id} to {agent_type}")
