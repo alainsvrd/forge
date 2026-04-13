@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count
 from django.http import JsonResponse, HttpResponse, StreamingHttpResponse
 from django.shortcuts import render, get_object_or_404
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from asgiref.sync import sync_to_async
@@ -678,6 +679,7 @@ def prototype_view(request):
     return render(request, 'core/prototype.html')
 
 
+@xframe_options_sameorigin
 @login_required
 def prototype_preview(request, prototype_id):
     """Serve prototype HTML with comment overlay injected."""

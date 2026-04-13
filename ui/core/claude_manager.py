@@ -118,6 +118,7 @@ class ClaudeCodeManager:
             '--permission-mode', 'bypassPermissions',
             '--model', 'sonnet',
             '--mcp-config', mcp_config_path,
+            '--strict-mcp-config',
             '--add-dir', WORKSPACE_DIR,
         ]
 
