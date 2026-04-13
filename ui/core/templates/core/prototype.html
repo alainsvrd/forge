@@ -1,0 +1,179 @@
+{% extends "core/base.html" %}
+{% block title %}Forge — Prototypes{% endblock %}
+
+{% block extra_css %}
+.proto-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 12px;
+  height: calc(100vh - 70px);
+  overflow: hidden;
+}
+@media (max-width: 800px) { .proto-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } }
+
+/* Sidebar */
+.proto-sidebar {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  display: flex; flex-direction: column; overflow-y: auto;
+}
+.proto-sidebar-header {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+.proto-item {
+  padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.proto-item:hover { background: var(--surface-2); }
+.proto-item.active { background: var(--surface-2); border-left: 3px solid var(--accent); }
+.proto-item-title { font-size: 13px; font-weight: 500; }
+.proto-item-meta { font-size: 10px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 8px; }
+.proto-empty { padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px; }
+
+/* Main area */
+.proto-main {
+  display: flex; flex-direction: column; gap: 10px; overflow: hidden;
+}
+.proto-preview-frame {
+  flex: 1; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  background: #fff;
+}
+.proto-preview-frame iframe {
+  width: 100%; height: 100%; border: none;
+}
+.proto-no-selection {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; color: var(--text-muted); font-size: 14px;
+}
+
+/* Bottom panels */
+.proto-panels {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  max-height: 200px; flex-shrink: 0;
+}
+@media (max-width: 800px) { .proto-panels { grid-template-columns: 1fr; } }
+.proto-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; overflow-y: auto;
+}
+.proto-panel-title {
+  font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 6px;
+}
+.proto-spec { font-size: 12px; white-space: pre-wrap; line-height: 1.5; }
+.proto-comment {
+  font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border);
+}
+.proto-comment:last-child { border-bottom: none; }
+.proto-comment-author { font-weight: 600; color: var(--accent); }
+.proto-comment-el { font-size: 10px; color: var(--text-muted); font-style: italic; }
+.proto-comment.resolved { opacity: 0.5; }
+
+.badge-building { background: #1e3a5f; color: var(--blue); }
+.badge-review { background: #431407; color: var(--orange); }
+.badge-iterating { background: #2e1065; color: var(--purple); }
+.badge-approved { background: #14532d; color: var(--green); }
+{% endblock %}
+
+{% block content %}
+<div x-data="protoViewer()" x-init="init()" class="proto-layout">
+
+  <!-- Sidebar -->
+  <div class="proto-sidebar">
+    <div class="proto-sidebar-header">Prototypes</div>
+    <template x-if="prototypes.length === 0">
+      <div class="proto-empty">No prototypes yet.<br>Ask PM to build one.</div>
+    </template>
+    <template x-for="p in prototypes" :key="p.id">
+      <div class="proto-item" :class="{ active: selected?.id === p.id }" @click="select(p)">
+        <div class="proto-item-title" x-text="p.title"></div>
+        <div class="proto-item-meta">
+          <span class="badge" :class="'badge-' + p.status" x-text="p.status"></span>
+          <span x-text="p.comment_count + ' comments'"></span>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Main -->
+  <div class="proto-main">
+    <template x-if="!selected">
+      <div class="proto-preview-frame">
+        <div class="proto-no-selection">Select a prototype from the sidebar</div>
+      </div>
+    </template>
+    <template x-if="selected">
+      <div class="proto-preview-frame">
+        <iframe :src="'/prototype/preview/' + selected.id + '/'" x-ref="previewFrame"></iframe>
+      </div>
+    </template>
+
+    <template x-if="detail">
+      <div class="proto-panels">
+        <!-- Backend Spec -->
+        <div class="proto-panel">
+          <div class="proto-panel-title">Backend Spec</div>
+          <div class="proto-spec" x-html="renderMd(detail.backend_spec || 'No backend spec yet.')"></div>
+        </div>
+        <!-- Comments -->
+        <div class="proto-panel">
+          <div class="proto-panel-title">Comments (<span x-text="(detail.comments||[]).filter(c=>!c.resolved).length"></span> open)</div>
+          <template x-for="c in (detail.comments||[])" :key="c.id">
+            <div class="proto-comment" :class="{ resolved: c.resolved }">
+              <span class="proto-comment-author" x-text="c.author"></span>:
+              <span x-text="c.content"></span>
+              <template x-if="c.element_text">
+                <div class="proto-comment-el" x-text="'On: ' + c.element_text"></div>
+              </template>
+            </div>
+          </template>
+          <template x-if="!(detail.comments||[]).length">
+            <div style="font-size:11px; color:var(--text-muted);">No comments yet. Open the preview and use the comment button.</div>
+          </template>
+        </div>
+      </div>
+    </template>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function protoViewer() {
+  return {
+    prototypes: [],
+    selected: null,
+    detail: null,
+
+    async init() {
+      await this.loadList();
+      setInterval(() => this.loadList(), 5000);
+      setInterval(() => { if (this.selected) this.loadDetail(this.selected.id); }, 3000);
+    },
+
+    async loadList() {
+      try {
+        this.prototypes = await fetch('/api/prototypes/').then(r => r.json());
+      } catch {}
+    },
+
+    async select(proto) {
+      this.selected = proto;
+      await this.loadDetail(proto.id);
+    },
+
+    async loadDetail(id) {
+      try {
+        this.detail = await fetch('/api/prototypes/' + id + '/').then(r => r.json());
+      } catch {}
+    },
+
+    renderMd(text) {
+      if (!text) return '';
+      try { return marked.parse(text); } catch { return text; }
+    },
+  };
+}
+</script>
+{% endblock %}

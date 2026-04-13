@@ -140,6 +140,7 @@
       <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">Dashboard</a>
       <a href="{% url 'pm_chat' %}" class="{% if request.resolver_match.url_name == 'pm_chat' %}active{% endif %}">PM Chat</a>
       <a href="{% url 'mcp_activity' %}" class="{% if request.resolver_match.url_name == 'mcp_activity' %}active{% endif %}">MCP Activity</a>
+      <a href="{% url 'prototype' %}" class="{% if request.resolver_match.url_name == 'prototype' %}active{% endif %}">Prototypes</a>
     </div>
     <div class="nav-spacer"></div>
     {% if user.is_authenticated %}

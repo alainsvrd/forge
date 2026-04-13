@@ -35,4 +35,12 @@ urlpatterns = [
 
     # MCP activity API
     path('api/mcp-activity/', views.api_mcp_activity, name='api_mcp_activity'),
+
+    # Prototype mode
+    path('prototype/', views.prototype_view, name='prototype'),
+    path('prototype/preview/<int:prototype_id>/', views.prototype_preview, name='prototype_preview'),
+    path('api/prototypes/', views.api_prototypes, name='api_prototypes'),
+    path('api/prototypes/<int:prototype_id>/', views.api_prototype_detail, name='api_prototype_detail'),
+    path('api/prototypes/<int:prototype_id>/comments/', views.api_prototype_comments, name='api_prototype_comments'),
+    path('api/prototypes/<int:prototype_id>/comments/<int:comment_id>/resolve/', views.api_prototype_comment_resolve, name='api_prototype_comment_resolve'),
 ]

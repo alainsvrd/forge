@@ -174,6 +174,65 @@ const PM_TOOLS = [
       },
     },
   },
+  {
+    name: "prototype_create",
+    description:
+      "Create a prototype record for the fast-design feedback loop. " +
+      "Call this BEFORE sending a PROTOTYPE MODE task to dev.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Prototype name" },
+        description: { type: "string", description: "What this prototype demonstrates" },
+      },
+      required: ["title", "description"],
+    },
+  },
+  {
+    name: "prototype_status",
+    description:
+      "Get prototype details including status, backend spec, and all user comments. " +
+      "Use to check user feedback after dev builds the prototype.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        prototype_id: { type: "number", description: "Prototype ID" },
+      },
+      required: ["prototype_id"],
+    },
+  },
+  {
+    name: "prototype_get_comments",
+    description:
+      "Get all user feedback comments on a prototype. Each comment includes " +
+      "the element selector and text of what the user clicked on.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        prototype_id: { type: "number", description: "Prototype ID" },
+      },
+      required: ["prototype_id"],
+    },
+  },
+  {
+    name: "prototype_update",
+    description:
+      "Update a prototype's status or backend spec. " +
+      "Use to mark as 'review' when dev finishes, or 'approved' when user accepts.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        prototype_id: { type: "number", description: "Prototype ID" },
+        status: {
+          type: "string",
+          enum: ["building", "review", "iterating", "approved"],
+          description: "New status",
+        },
+        backend_spec: { type: "string", description: "Updated backend spec (markdown)" },
+      },
+      required: ["prototype_id"],
+    },
+  },
 ];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -366,6 +425,87 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [{ type: "text", text: `Error: ${e.message}` }],
         isError: true,
       };
+    }
+  }
+
+  // ── Prototype tools (PM only) ──
+
+  if (name === "prototype_create" && AGENT_TYPE === "pm") {
+    const { title, description } = args as { title: string; description: string };
+    try {
+      const result = await api("/api/prototypes/", {
+        method: "POST",
+        body: JSON.stringify({ title, description }),
+      });
+      return {
+        content: [{
+          type: "text",
+          text: `Created prototype #${result.id}: ${title}\nPreview URL: /prototype/preview/${result.id}/\nViewer: /prototype/`,
+        }],
+      };
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+    }
+  }
+
+  if (name === "prototype_status" && AGENT_TYPE === "pm") {
+    const { prototype_id } = args as { prototype_id: number };
+    try {
+      const p = await api(`/api/prototypes/${prototype_id}/`);
+      const comments = (p.comments || []).filter((c: any) => !c.resolved);
+      const lines = [
+        `Prototype #${p.id}: ${p.title}`,
+        `Status: ${p.status}`,
+        `Path: ${p.html_path}`,
+        `Open comments: ${comments.length}`,
+      ];
+      if (p.backend_spec) lines.push(`\nBackend spec:\n${p.backend_spec.substring(0, 500)}`);
+      for (const c of comments) {
+        const el = c.element_text ? ` [on: "${c.element_text}"]` : "";
+        lines.push(`  ${c.author}: ${c.content}${el}`);
+      }
+      return { content: [{ type: "text", text: lines.join("\n") }] };
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+    }
+  }
+
+  if (name === "prototype_get_comments" && AGENT_TYPE === "pm") {
+    const { prototype_id } = args as { prototype_id: number };
+    try {
+      const data = await api(`/api/prototypes/${prototype_id}/comments/`);
+      const comments = data.comments || [];
+      if (!comments.length) {
+        return { content: [{ type: "text", text: "No comments yet." }] };
+      }
+      const lines = comments.map((c: any) => {
+        const el = c.element_text ? ` [on: "${c.element_text}"]` : "";
+        const resolved = c.resolved ? " (RESOLVED)" : "";
+        return `${c.author}: ${c.content}${el}${resolved}`;
+      });
+      return { content: [{ type: "text", text: lines.join("\n") }] };
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+    }
+  }
+
+  if (name === "prototype_update" && AGENT_TYPE === "pm") {
+    const { prototype_id, status, backend_spec } = args as {
+      prototype_id: number; status?: string; backend_spec?: string;
+    };
+    try {
+      const body: any = {};
+      if (status) body.status = status;
+      if (backend_spec) body.backend_spec = backend_spec;
+      await api(`/api/prototypes/${prototype_id}/`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+      return {
+        content: [{ type: "text", text: `Prototype #${prototype_id} updated.${status ? ` Status: ${status}` : ""}` }],
+      };
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
     }
   }
 

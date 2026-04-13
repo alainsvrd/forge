@@ -4,13 +4,15 @@ import json
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count
-from django.http import JsonResponse, StreamingHttpResponse
-from django.shortcuts import render
+from django.http import JsonResponse, HttpResponse, StreamingHttpResponse
+from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from asgiref.sync import sync_to_async
 
-from .models import Project, Task, ChatMessage, AgentLog, AgentSession
+import os
+
+from .models import Project, Task, ChatMessage, AgentLog, AgentSession, Prototype, PrototypeComment
 
 
 # ---------------------------------------------------------------------------
@@ -662,3 +664,341 @@ def api_mcp_activity(request):
 def mcp_activity_view(request):
     """MCP activity page."""
     return render(request, 'core/mcp_activity.html')
+
+
+# ---------------------------------------------------------------------------
+# Prototype Mode
+# ---------------------------------------------------------------------------
+
+WORKSPACE_DIR = '/opt/forge/workspace'
+
+@login_required
+def prototype_view(request):
+    """Prototype viewer page."""
+    return render(request, 'core/prototype.html')
+
+
+@login_required
+def prototype_preview(request, prototype_id):
+    """Serve prototype HTML with comment overlay injected."""
+    proto = get_object_or_404(Prototype, id=prototype_id)
+    html_path = proto.html_path or 'prototype/index.html'
+    full_path = os.path.join(WORKSPACE_DIR, html_path)
+
+    if not os.path.isfile(full_path):
+        return HttpResponse(
+            f'<h2>Prototype not built yet</h2><p>Expected: {html_path}</p>',
+            content_type='text/html',
+        )
+
+    with open(full_path, 'r') as f:
+        html = f.read()
+
+    # Inject comment overlay script before </body>
+    overlay_script = _build_comment_overlay(prototype_id)
+    if '</body>' in html:
+        html = html.replace('</body>', overlay_script + '\n</body>')
+    else:
+        html += overlay_script
+
+    return HttpResponse(html, content_type='text/html')
+
+
+def _build_comment_overlay(prototype_id):
+    """Build the inline JS comment overlay for prototype previews."""
+    return f'''
+<style>
+  .forge-comment-fab {{
+    position: fixed; bottom: 24px; right: 24px; z-index: 99999;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: #6c8cff; color: #fff; border: none; cursor: pointer;
+    font-size: 22px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.15s, background 0.15s;
+  }}
+  .forge-comment-fab:hover {{ transform: scale(1.1); }}
+  .forge-comment-fab.active {{ background: #f87171; }}
+  .forge-comment-mode * {{ cursor: crosshair !important; }}
+  .forge-comment-mode *:hover {{ outline: 2px solid #6c8cff !important; outline-offset: 2px; }}
+  .forge-comment-popup {{
+    position: fixed; z-index: 100000;
+    background: #1a1d27; border: 1px solid #2e3347; border-radius: 10px;
+    padding: 14px; width: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    font-family: -apple-system, sans-serif;
+  }}
+  .forge-comment-popup textarea {{
+    width: 100%; min-height: 70px; background: #242836; border: 1px solid #2e3347;
+    border-radius: 6px; color: #e1e4ed; padding: 8px; font-size: 13px;
+    font-family: inherit; resize: vertical;
+  }}
+  .forge-comment-popup textarea:focus {{ outline: none; border-color: #6c8cff; }}
+  .forge-comment-popup .forge-btn {{
+    margin-top: 8px; padding: 6px 16px; border-radius: 6px; border: none;
+    background: #6c8cff; color: #fff; cursor: pointer; font-size: 13px;
+  }}
+  .forge-comment-popup .forge-btn:hover {{ opacity: 0.9; }}
+  .forge-comment-popup .forge-cancel {{
+    background: transparent; color: #8b90a5; border: 1px solid #2e3347; margin-left: 6px;
+  }}
+  .forge-comment-popup .forge-el-ref {{
+    font-size: 11px; color: #8b90a5; margin-bottom: 8px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }}
+  .forge-pin {{
+    position: absolute; z-index: 99998; width: 22px; height: 22px;
+    background: #fb923c; border-radius: 50%; border: 2px solid #fff;
+    cursor: pointer; font-size: 11px; color: #fff; display: flex;
+    align-items: center; justify-content: center; font-weight: 700;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3); transition: transform 0.1s;
+  }}
+  .forge-pin:hover {{ transform: scale(1.2); }}
+  .forge-pin.resolved {{ background: #4ade80; opacity: 0.6; }}
+  .forge-pin-tooltip {{
+    position: absolute; bottom: 28px; left: -4px; z-index: 100001;
+    background: #1a1d27; border: 1px solid #2e3347; border-radius: 8px;
+    padding: 10px; width: 260px; font-size: 12px; color: #e1e4ed;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4); display: none;
+    font-family: -apple-system, sans-serif;
+  }}
+  .forge-pin:hover .forge-pin-tooltip {{ display: block; }}
+</style>
+
+<button class="forge-comment-fab" id="forgeCommentFab" title="Toggle comment mode">&#128172;</button>
+
+<script>
+(function() {{
+  const PROTO_ID = {prototype_id};
+  const API = '/api/prototypes/' + PROTO_ID + '/comments/';
+  let commentMode = false;
+  const fab = document.getElementById('forgeCommentFab');
+
+  fab.addEventListener('click', () => {{
+    commentMode = !commentMode;
+    fab.classList.toggle('active', commentMode);
+    document.body.classList.toggle('forge-comment-mode', commentMode);
+  }});
+
+  function getSelector(el) {{
+    if (el.id) return '#' + el.id;
+    let path = [];
+    while (el && el !== document.body) {{
+      let tag = el.tagName.toLowerCase();
+      if (el.className && typeof el.className === 'string') {{
+        const cls = el.className.split(/\\s+/).filter(c => !c.startsWith('forge-')).slice(0,2).join('.');
+        if (cls) tag += '.' + cls;
+      }}
+      const parent = el.parentElement;
+      if (parent) {{
+        const siblings = Array.from(parent.children).filter(c => c.tagName === el.tagName);
+        if (siblings.length > 1) tag += ':nth-child(' + (Array.from(parent.children).indexOf(el) + 1) + ')';
+      }}
+      path.unshift(tag);
+      el = parent;
+    }}
+    return path.join(' > ');
+  }}
+
+  document.addEventListener('click', (e) => {{
+    if (!commentMode) return;
+    if (e.target.closest('.forge-comment-popup') || e.target.closest('.forge-comment-fab') || e.target.closest('.forge-pin')) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Remove existing popup
+    document.querySelectorAll('.forge-comment-popup').forEach(p => p.remove());
+
+    const el = e.target;
+    const selector = getSelector(el);
+    const elText = (el.textContent || '').trim().substring(0, 100);
+    const rect = el.getBoundingClientRect();
+
+    const popup = document.createElement('div');
+    popup.className = 'forge-comment-popup';
+    popup.style.top = Math.min(rect.bottom + 8, window.innerHeight - 200) + 'px';
+    popup.style.left = Math.min(rect.left, window.innerWidth - 340) + 'px';
+    popup.innerHTML = `
+      <div class="forge-el-ref">On: ${{elText || selector}}</div>
+      <textarea placeholder="Your feedback on this element..." autofocus></textarea>
+      <button class="forge-btn" id="forgeSubmitComment">Submit</button>
+      <button class="forge-btn forge-cancel" id="forgeCancelComment">Cancel</button>
+    `;
+    document.body.appendChild(popup);
+    popup.querySelector('textarea').focus();
+
+    popup.querySelector('#forgeCancelComment').onclick = () => popup.remove();
+    popup.querySelector('#forgeSubmitComment').onclick = async () => {{
+      const content = popup.querySelector('textarea').value.trim();
+      if (!content) return;
+      try {{
+        await fetch(API, {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ content, element_selector: selector, element_text: elText, author: 'user' }}),
+        }});
+        popup.innerHTML = '<div style="color:#4ade80;padding:8px;">Comment saved!</div>';
+        setTimeout(() => {{ popup.remove(); loadComments(); }}, 1000);
+      }} catch(err) {{
+        popup.innerHTML = '<div style="color:#f87171;padding:8px;">Error saving comment</div>';
+      }}
+    }};
+  }}, true);
+
+  // Load existing comments as pins
+  async function loadComments() {{
+    document.querySelectorAll('.forge-pin').forEach(p => p.remove());
+    try {{
+      const res = await fetch(API);
+      const data = await res.json();
+      (data.comments || []).forEach((c, i) => {{
+        if (!c.element_selector) return;
+        const target = document.querySelector(c.element_selector);
+        if (!target) return;
+        const rect = target.getBoundingClientRect();
+        const pin = document.createElement('div');
+        pin.className = 'forge-pin' + (c.resolved ? ' resolved' : '');
+        pin.style.top = (window.scrollY + rect.top - 8) + 'px';
+        pin.style.left = (rect.right - 8) + 'px';
+        pin.textContent = i + 1;
+        pin.innerHTML += '<div class="forge-pin-tooltip"><strong>' + c.author + ':</strong> ' +
+          c.content.replace(/</g, '&lt;') + '</div>';
+        document.body.appendChild(pin);
+      }});
+    }} catch(e) {{}}
+  }}
+  setTimeout(loadComments, 500);
+}})();
+</script>'''
+
+
+@csrf_exempt
+@_api_auth
+@require_http_methods(['GET', 'POST'])
+def api_prototypes(request):
+    """List or create prototypes."""
+    if request.method == 'GET':
+        qs = Prototype.objects.all()
+        status = request.GET.get('status')
+        if status:
+            qs = qs.filter(status=status)
+        protos = list(qs.values(
+            'id', 'project_id', 'title', 'description', 'status',
+            'html_path', 'backend_spec', 'created_at', 'updated_at',
+        ))
+        for p in protos:
+            p['created_at'] = p['created_at'].isoformat()
+            p['updated_at'] = p['updated_at'].isoformat()
+            p['comment_count'] = PrototypeComment.objects.filter(
+                prototype_id=p['id'], resolved=False
+            ).count()
+        return JsonResponse(protos, safe=False)
+
+    # POST
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'invalid json'}, status=400)
+
+    project = Project.objects.first()
+    if not project:
+        return JsonResponse({'error': 'no project'}, status=400)
+
+    proto = Prototype.objects.create(
+        project=project,
+        title=data.get('title', ''),
+        description=data.get('description', ''),
+        html_path=data.get('html_path', 'prototype/index.html'),
+        backend_spec=data.get('backend_spec', ''),
+    )
+    return JsonResponse({
+        'id': proto.id,
+        'title': proto.title,
+        'status': proto.status,
+    }, status=201)
+
+
+@csrf_exempt
+@_api_auth
+@require_http_methods(['GET', 'PUT'])
+def api_prototype_detail(request, prototype_id):
+    """Get or update a prototype."""
+    proto = get_object_or_404(Prototype, id=prototype_id)
+
+    if request.method == 'GET':
+        comments = list(PrototypeComment.objects.filter(
+            prototype=proto
+        ).values('id', 'author', 'content', 'element_selector', 'element_text',
+                 'resolved', 'created_at'))
+        for c in comments:
+            c['created_at'] = c['created_at'].isoformat()
+        return JsonResponse({
+            'id': proto.id,
+            'title': proto.title,
+            'description': proto.description,
+            'status': proto.status,
+            'html_path': proto.html_path,
+            'backend_spec': proto.backend_spec,
+            'comments': comments,
+            'created_at': proto.created_at.isoformat(),
+        })
+
+    # PUT
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'invalid json'}, status=400)
+
+    if 'status' in data:
+        proto.status = data['status']
+    if 'backend_spec' in data:
+        proto.backend_spec = data['backend_spec']
+    if 'html_path' in data:
+        proto.html_path = data['html_path']
+    proto.save()
+    return JsonResponse({'ok': True, 'id': proto.id, 'status': proto.status})
+
+
+@csrf_exempt
+@_api_auth
+@require_http_methods(['GET', 'POST'])
+def api_prototype_comments(request, prototype_id):
+    """List or add comments for a prototype."""
+    proto = get_object_or_404(Prototype, id=prototype_id)
+
+    if request.method == 'GET':
+        comments = list(PrototypeComment.objects.filter(
+            prototype=proto
+        ).values('id', 'author', 'content', 'element_selector', 'element_text',
+                 'resolved', 'created_at'))
+        for c in comments:
+            c['created_at'] = c['created_at'].isoformat()
+        return JsonResponse({'comments': comments})
+
+    # POST
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'invalid json'}, status=400)
+
+    comment = PrototypeComment.objects.create(
+        prototype=proto,
+        author=data.get('author', 'user'),
+        content=data.get('content', ''),
+        element_selector=data.get('element_selector', ''),
+        element_text=data.get('element_text', ''),
+    )
+    return JsonResponse({
+        'id': comment.id,
+        'author': comment.author,
+        'content': comment.content,
+    }, status=201)
+
+
+@csrf_exempt
+@_api_auth
+@require_http_methods(['PUT'])
+def api_prototype_comment_resolve(request, prototype_id, comment_id):
+    """Resolve a comment."""
+    comment = get_object_or_404(PrototypeComment, id=comment_id, prototype_id=prototype_id)
+    comment.resolved = True
+    comment.save(update_fields=['resolved'])
+    return JsonResponse({'ok': True})

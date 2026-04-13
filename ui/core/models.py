@@ -151,3 +151,46 @@ class AgentSession(models.Model):
 
     def __str__(self):
         return f'AgentSession {self.agent_type} ({self.status})'
+
+
+class Prototype(models.Model):
+    """A fast-design prototype: interactive HTML+Tailwind+JS, no backend."""
+    STATUS_CHOICES = [
+        ('building', 'Building'),
+        ('review', 'In Review'),
+        ('iterating', 'Iterating'),
+        ('approved', 'Approved'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='prototypes')
+    title = models.CharField(max_length=500)
+    description = models.TextField(default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='building')
+    html_path = models.CharField(max_length=500, default='', blank=True)
+    backend_spec = models.TextField(default='', blank=True)
+    task = models.ForeignKey(Task, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Prototype [{self.status}] {self.title}'
+
+
+class PrototypeComment(models.Model):
+    """Inline user/PM feedback on a prototype element."""
+    prototype = models.ForeignKey(Prototype, on_delete=models.CASCADE, related_name='comments')
+    author = models.CharField(max_length=50)
+    content = models.TextField()
+    element_selector = models.CharField(max_length=500, blank=True)
+    element_text = models.CharField(max_length=200, blank=True)
+    resolved = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'Comment by {self.author} on prototype #{self.prototype_id}'

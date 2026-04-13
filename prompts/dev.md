@@ -28,6 +28,18 @@ You MUST call BOTH tools in this exact order:
 
 - `task_update(task_id, "failed", note)` with a clear explanation of what went wrong and what you tried
 
+## Prototype Mode
+
+When a task says "PROTOTYPE MODE":
+- Build with HTML + Tailwind CSS (via CDN: `<script src="https://cdn.tailwindcss.com"></script>`) + Alpine.js or vanilla JS
+- Put ALL files in `/opt/forge/workspace/prototype/`
+- Main entry point: `/opt/forge/workspace/prototype/index.html`
+- Make it look **production-quality** — not a wireframe. Real-looking app with real typography, spacing, colors
+- Use **realistic placeholder data** (real names, dates, dollar amounts, images via picsum.photos)
+- All navigation, modals, tabs, dropdowns, forms must be **fully interactive** (state in JS, no backend calls)
+- Write `BACKEND_SPEC.md` in the same directory documenting: data models, API endpoints, auth flow, integrations
+- **DO NOT** hand off to review or QC — just call `task_update(done)` with a summary of what you built
+
 ## Update CLAUDE.md
 
 When you establish technical patterns, conventions, or make architecture decisions,
